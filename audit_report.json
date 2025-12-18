@@ -1,0 +1,606 @@
+{
+  "project_id": "ucr-research-computing",
+  "scan_time": "2025-12-18T21:14:08.895416",
+  "services": {
+    "compute": [
+      {
+        "name": "ucr-se-endpoint-01",
+        "id": "3739644967036536255",
+        "status": "RUNNING",
+        "machine_type": "n2-standard-32",
+        "zone": "us-central1-a",
+        "creation_timestamp": "2025-10-09T11:13:38.450000-07:00",
+        "labels": {
+          "goog-ops-agent-policy": "v2-x86-template-1-4-0"
+        },
+        "disks": [
+          {
+            "name": "instance-20251009-180946",
+            "size_gb": 500,
+            "type": "PERSISTENT",
+            "boot": true
+          }
+        ],
+        "gpus": [],
+        "internal_ip": "10.128.0.44",
+        "external_ip": "104.154.16.122"
+      },
+      {
+        "name": "um-workstation1-1",
+        "id": "4495038450761452744",
+        "status": "RUNNING",
+        "machine_type": "n2d-standard-48",
+        "zone": "us-central1-a",
+        "creation_timestamp": "2023-02-22T11:51:04.772000-08:00",
+        "labels": {},
+        "disks": [
+          {
+            "name": "instance-1",
+            "size_gb": 500,
+            "type": "PERSISTENT",
+            "boot": true
+          }
+        ],
+        "gpus": [],
+        "internal_ip": "10.128.0.90",
+        "external_ip": "34.31.203.129"
+      },
+      {
+        "name": "rcrm",
+        "id": "7160330330876726127",
+        "status": "RUNNING",
+        "machine_type": "n2d-standard-2",
+        "zone": "us-central1-f",
+        "creation_timestamp": "2025-10-16T15:45:21.269000-07:00",
+        "labels": {
+          "goog-ops-agent-policy": "v2-x86-template-1-4-0"
+        },
+        "disks": [
+          {
+            "name": "rcrm",
+            "size_gb": 500,
+            "type": "PERSISTENT",
+            "boot": true
+          }
+        ],
+        "gpus": [],
+        "internal_ip": "10.128.0.43",
+        "external_ip": "34.173.122.203"
+      }
+    ],
+    "run": [
+      {
+        "name": "xenon-ai-particle-evolution",
+        "region": "us-west1",
+        "url": "https://xenon-ai-particle-evolution-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-11-20T02:19:47.230848Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 2
+      },
+      {
+        "name": "veo-studio",
+        "region": "us-west1",
+        "url": "https://veo-studio-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-11-19T23:56:00.560279Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 1
+      },
+      {
+        "name": "dungeonmind-ai-auto-battler",
+        "region": "us-west1",
+        "url": "https://dungeonmind-ai-auto-battler-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-11-19T04:11:25.145563Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 1
+      },
+      {
+        "name": "declutterai",
+        "region": "us-west1",
+        "url": "https://declutterai-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-11-19T00:14:01.979376Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 1
+      },
+      {
+        "name": "interactive-grant-funding-explorer",
+        "region": "us-west1",
+        "url": "https://interactive-grant-funding-explorer-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-07-15T03:29:28.524675Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 4
+      },
+      {
+        "name": "kayak-trip-planner-ai",
+        "region": "us-west1",
+        "url": "https://kayak-trip-planner-ai-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-06-29T21:11:36.416334Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 3
+      },
+      {
+        "name": "ucr-researcher-portal",
+        "region": "us-west1",
+        "url": "https://ucr-researcher-portal-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-06-18T22:39:14.718146Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 3
+      },
+      {
+        "name": "copy-of-ucr-rcd",
+        "region": "us-west1",
+        "url": "https://copy-of-ucr-rcd-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-06-16T21:26:34.941619Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 2
+      },
+      {
+        "name": "ucr-rcd",
+        "region": "us-west1",
+        "url": "https://ucr-rcd-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-06-16T02:24:25.459079Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 26
+      },
+      {
+        "name": "copycat-of-ucr-research-computing-dashboard",
+        "region": "us-west1",
+        "url": "https://copycat-of-ucr-research-computing-dashboard-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-06-15T16:35:30.707813Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 12
+      },
+      {
+        "name": "geoquest-rpg-realm-walker",
+        "region": "us-west1",
+        "url": "https://geoquest-rpg-realm-walker-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-06-11T03:24:03.066475Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 6
+      },
+      {
+        "name": "ucr-ai-prompt-gallery",
+        "region": "us-west1",
+        "url": "https://ucr-ai-prompt-gallery-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-06-10T22:22:30.071589Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 12
+      },
+      {
+        "name": "solid-state-battery-electron-simulator",
+        "region": "us-west1",
+        "url": "https://solid-state-battery-electron-simulator-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-05-27T14:57:16.542482Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 1
+      },
+      {
+        "name": "ucr-research-computing-dashboard",
+        "region": "us-west1",
+        "url": "https://ucr-research-computing-dashboard-dsfh6rrlia-uw.a.run.app",
+        "image": "us-docker.pkg.dev/cloudrun/container/aistudio/applet-proxy",
+        "create_time": "2025-05-23T15:36:05.905137Z",
+        "last_modifier": "forsythc@ucr.edu",
+        "ingress_traffic": "1",
+        "generation": 27
+      }
+    ],
+    "storage": [
+      {
+        "name": "492106370716_us_central1_import_content",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-10-31T19:36:25.095000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 0
+      },
+      {
+        "name": "ai-studio-bucket-492106370716-us-west1",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2025-05-21T21:39:02.198000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 39776961
+      },
+      {
+        "name": "artifacts.ucr-research-computing.appspot.com",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-01-22T04:09:06.683000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 101196765
+      },
+      {
+        "name": "chuck-transcription-bucket-20251118",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2025-11-19T02:33:24.402000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 87285085
+      },
+      {
+        "name": "cloud-ai-platform-9b1162de-5fc8-4da6-aa65-329fb95a78e4",
+        "location": "US-CENTRAL1",
+        "storage_class": "REGIONAL",
+        "creation_timestamp": "2022-10-18T02:52:19.623000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 24941
+      },
+      {
+        "name": "cloud-ai-platform-9d23e922-83ab-4bf4-9619-ca7d31b12720",
+        "location": "US-WEST1",
+        "storage_class": "REGIONAL",
+        "creation_timestamp": "2023-05-16T00:10:55.151000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 0
+      },
+      {
+        "name": "cluster-spack-scripts-11227176",
+        "location": "US-CENTRAL1",
+        "storage_class": "REGIONAL",
+        "creation_timestamp": "2025-04-08T16:05:57.344000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 35794
+      },
+      {
+        "name": "cluster-startup-scripts-2455364d",
+        "location": "US-CENTRAL1",
+        "storage_class": "REGIONAL",
+        "creation_timestamp": "2025-04-08T16:05:57.392000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 16550
+      },
+      {
+        "name": "crm-backup-20251105-3dbcefbc",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2025-11-05T18:13:03.744000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 812812077
+      },
+      {
+        "name": "ent-genome-data",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-01-19T18:08:34.390000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 0
+      },
+      {
+        "name": "erfan-test-bucket",
+        "location": "US-CENTRAL1",
+        "storage_class": "ARCHIVE",
+        "creation_timestamp": "2024-07-01T18:04:53.162000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 2369258
+      },
+      {
+        "name": "forsythc-ucr-agent-builder-storage",
+        "location": "US",
+        "storage_class": "NEARLINE",
+        "creation_timestamp": "2025-06-30T19:53:31.040000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 62991509
+      },
+      {
+        "name": "gcf-v2-sources-492106370716-us-central1",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-11-06T00:34:32.505000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": true,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 623
+      },
+      {
+        "name": "gcf-v2-uploads-492106370716-us-central1",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-11-06T00:34:31.074000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 0
+      },
+      {
+        "name": "hpcc_storage_test",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-03-23T23:06:32.345000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 166
+      },
+      {
+        "name": "jkats-carde-data-transfer",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-09-04T19:24:11.492000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 151451644
+      },
+      {
+        "name": "jkats-jkahne-data-transfer",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-09-20T01:40:27.491000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 59869640889
+      },
+      {
+        "name": "jkats-jrubi036-recovered",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-12-06T17:41:17.578000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 60460301746
+      },
+      {
+        "name": "jkats-keithrd-data-transfer",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-08-26T18:29:19.575000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 2873845353952
+      },
+      {
+        "name": "jkats-loralee-data-transfer",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-09-10T17:28:18.486000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 164956477514
+      },
+      {
+        "name": "jkats-public-test",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-06-14T19:34:56.570000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 2370223
+      },
+      {
+        "name": "jkats-salton-sea-task-force",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2025-02-01T00:28:32.191000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 9173742
+      },
+      {
+        "name": "research-db-migration-temp-102725",
+        "location": "US-WEST1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2025-10-27T17:07:58.099000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 70952502
+      },
+      {
+        "name": "slurm-cluster45411",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2025-04-08T16:05:57.266000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 90097
+      },
+      {
+        "name": "staging.ucr-research-computing.appspot.com",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-03-10T23:26:12.299000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 0
+      },
+      {
+        "name": "ucr-crm-umi-work-backup-2025-09-23",
+        "location": "US-WEST1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2025-09-23T18:57:10.534000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 120167408
+      },
+      {
+        "name": "ucr-research-computing",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2022-10-12T20:34:46.596000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 736729865
+      },
+      {
+        "name": "ucr-research-computing-chuck-containers",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-02-24T23:13:17.106000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 270918481
+      },
+      {
+        "name": "ucr-research-computing-rcrm",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2025-10-20T19:23:15.724000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 0
+      },
+      {
+        "name": "ucr-research-computing.appspot.com",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-03-10T23:26:11.291000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 0
+      },
+      {
+        "name": "ucr-research-computing_cloudbuild",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-05-11T01:46:06.106000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 257747556
+      },
+      {
+        "name": "ucr-ursa-major-kats-installers",
+        "location": "US-EAST1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-04-07T06:53:52.877000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 24003183
+      },
+      {
+        "name": "ucr-ursa-major-kats-utility",
+        "location": "US-EAST1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-04-03T20:22:35.822000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 32872
+      },
+      {
+        "name": "ucr-ursa-major-logs-bucket",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-04-19T15:45:13.086000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 120275064305
+      },
+      {
+        "name": "umcrshcp-startup-scripts-2ceb0459",
+        "location": "US-CENTRAL1",
+        "storage_class": "REGIONAL",
+        "creation_timestamp": "2023-02-19T06:14:32.265000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 16411
+      },
+      {
+        "name": "ursa-major-gam-files",
+        "location": "US-EAST1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-09-23T00:15:17.462000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 225960279
+      },
+      {
+        "name": "ursa-major-liz-davis-gui-test-2",
+        "location": "US-CENTRAL1",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2023-01-11T00:53:55.088000Z",
+        "public_access_prevention": "enforced",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 3848559347
+      },
+      {
+        "name": "ursa-major-startup-scripts-3123b03a",
+        "location": "US-CENTRAL1",
+        "storage_class": "REGIONAL",
+        "creation_timestamp": "2023-02-17T15:59:41.249000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": true,
+        "size_bytes": 10064
+      },
+      {
+        "name": "us.artifacts.ucr-research-computing.appspot.com",
+        "location": "US",
+        "storage_class": "STANDARD",
+        "creation_timestamp": "2024-03-11T20:12:21.363000Z",
+        "public_access_prevention": "inherited",
+        "versioning_enabled": false,
+        "uniform_bucket_level_access": false,
+        "size_bytes": 443989189
+      }
+    ]
+  }
+}

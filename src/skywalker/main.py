@@ -49,6 +49,11 @@ def main() -> None:
         help="Output results as JSON",
     )
 
+    parser.add_argument(
+        "--pdf",
+        help="Output report to a PDF file (e.g., report.pdf)",
+    )
+
     args = parser.parse_args()
 
     # If JSON is requested, we silence the console for progress updates
@@ -187,6 +192,17 @@ def main() -> None:
         # Final JSON Output
         if args.json:
             print(json.dumps(report_data, indent=2))
+
+        # PDF Output
+        if args.pdf:
+            console.print(f"\n[bold]Generating PDF report: {args.pdf}[/bold]")
+            try:
+                from .reporter import generate_pdf
+
+                generate_pdf(report_data, args.pdf)
+                console.print("[green]PDF generated successfully.[/green]")
+            except Exception as e:
+                console.print(f"[bold red]Failed to generate PDF: {e}[/bold red]")
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
