@@ -4,7 +4,7 @@ import sys
 from rich.console import Console
 
 # We will import other walkers here as we implement them
-from .walkers import compute
+from .walkers import compute, storage
 
 
 def main() -> None:
@@ -68,7 +68,8 @@ def main() -> None:
                 ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
                 if inst.external_ip:
                     ip_text += f" ({inst.external_ip})"
-                created_text = f" | Created: {inst.creation_timestamp.strftime('%Y-%m-%d')}"
+                created_date = inst.creation_timestamp.strftime("%Y-%m-%d")
+                created_text = f" | Created: {created_date}"
                 console.print(
                     f" - [green]{inst.name}[/green] ({inst.machine_type})"
                     f" [{inst.status}]{created_text}{gpu_text}{disk_text}{ip_text}"
@@ -76,7 +77,18 @@ def main() -> None:
 
         if "storage" in services:
             console.print("\n[bold]-- Cloud Storage --[/bold]")
-            console.print("[yellow]Not implemented yet[/yellow]")
+            buckets = storage.list_buckets(project_id=args.project_id)
+            console.print(f"Found [bold]{len(buckets)}[/bold] buckets:")
+            for b in buckets:
+                pap_status = (
+                    f"[green]{b.public_access_prevention}[/green]"
+                    if b.public_access_prevention == "enforced"
+                    else f"[red]{b.public_access_prevention}[/red]"
+                )
+                console.print(
+                    f" - [cyan]{b.name}[/cyan] ({b.location} | {b.storage_class})"
+                    f" | PAP: {pap_status}"
+                )
 
         # ... other services placeholders ...
 
