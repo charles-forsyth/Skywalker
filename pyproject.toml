@@ -32,6 +32,11 @@ test = [
     "pytest>=7.0.0",
     "pytest-mock>=3.10.0"
 ]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pandas-stubs>=2.0.0"
+]
 
 [project.scripts]
 # This creates the 'skywalker' command in your shell after install
@@ -40,7 +45,20 @@ skywalker = "skywalker.main:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/skywalker"]
 
-# Optional: Configuration for black/isort/ruff if you add linting later
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "RET", "SIM", "ARG", "PTH", "RUF"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["skywalker"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+
+
