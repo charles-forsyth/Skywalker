@@ -79,10 +79,11 @@ def main() -> None:
         f"across [bold]{len(regions)}[/bold] regions..."
     )
 
-    # Data container for JSON output
+    # Data container for JSON output (and PDF input)
+    # We store raw Pydantic objects here, and serialize later for JSON.
     report_data = {
         "project_id": args.project_id,
-        "scan_time": datetime.utcnow().isoformat(),
+        "scan_time": datetime.utcnow(),
         "services": {},
     }
 
@@ -111,7 +112,7 @@ def main() -> None:
                         total_instances += len(instances)
                         console.print(f"[bold]{zone}[/bold]: Found {len(instances)}")
                         for inst in instances:
-                            compute_results.append(inst.model_dump(mode="json"))
+                            compute_results.append(inst)
                             gpu_text = f" | {len(inst.gpus)} GPUs" if inst.gpus else ""
                             disk_text = f" | {len(inst.disks)} Disks"
                             ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
@@ -150,7 +151,7 @@ def main() -> None:
                             f"[bold]{region}[/bold]: Found {len(run_services)}"
                         )
                         for svc in run_services:
-                            run_results.append(svc.model_dump(mode="json"))
+                            run_results.append(svc)
                             console.print(
                                 f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
                                 f"   Image: {svc.image}\n"
@@ -168,9 +169,7 @@ def main() -> None:
         if "storage" in services:
             console.print("\n[bold]-- Cloud Storage --[/bold]")
             buckets = storage.list_buckets(project_id=args.project_id)
-            report_data["services"]["storage"] = [
-                b.model_dump(mode="json") for b in buckets
-            ]
+            report_data["services"]["storage"] = buckets
 
             console.print(f"Found [bold]{len(buckets)}[/bold] buckets:")
             for b in buckets:
@@ -191,7 +190,17 @@ def main() -> None:
 
         # Final JSON Output
         if args.json:
-            print(json.dumps(report_data, indent=2))
+            # We need to manually serialize the objects now
+            json_output = {
+                "project_id": report_data["project_id"],
+                "scan_time": report_data["scan_time"].isoformat(),
+                "services": {},
+            }
+            for svc_name, items in report_data["services"].items():
+                json_output["services"][svc_name] = [
+                    item.model_dump(mode="json") for item in items
+                ]
+            print(json.dumps(json_output, indent=2))
 
         # PDF Output
         if args.pdf:
