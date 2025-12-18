@@ -68,9 +68,10 @@ def main() -> None:
                 ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
                 if inst.external_ip:
                     ip_text += f" ({inst.external_ip})"
+                created_text = f" | Created: {inst.creation_timestamp.strftime('%Y-%m-%d')}"
                 console.print(
                     f" - [green]{inst.name}[/green] ({inst.machine_type})"
-                    f" [{inst.status}]{gpu_text}{disk_text}{ip_text}"
+                    f" [{inst.status}]{created_text}{gpu_text}{disk_text}{ip_text}"
                 )
 
         if "storage" in services:
