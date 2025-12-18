@@ -1,6 +1,7 @@
 import argparse
 import sys
 
+import humanize
 from rich.console import Console
 
 # We will import other walkers here as we implement them
@@ -85,9 +86,12 @@ def main() -> None:
                     if b.public_access_prevention == "enforced"
                     else f"[red]{b.public_access_prevention}[/red]"
                 )
+                size_str = (
+                    humanize.naturalsize(b.size_bytes) if b.size_bytes else "0 Bytes"
+                )
                 console.print(
                     f" - [cyan]{b.name}[/cyan] ({b.location} | {b.storage_class})"
-                    f" | PAP: {pap_status}"
+                    f" | Size: {size_str} | PAP: {pap_status}"
                 )
 
         # ... other services placeholders ...

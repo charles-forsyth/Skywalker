@@ -13,3 +13,6 @@ class GCPBucket(BaseModel):
     )
     versioning_enabled: bool = False
     uniform_bucket_level_access: bool = False
+    size_bytes: int | None = Field(
+        default=None, description="Total bytes from Cloud Monitoring"
+    )

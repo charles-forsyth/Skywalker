@@ -30,6 +30,12 @@ def test_list_buckets_mock(mocker):
     mock_iam.uniform_bucket_level_access_enabled = True
     mock_bucket.iam_configuration = mock_iam
 
+    # Mock bucket sizes
+    mocker.patch(
+        "skywalker.walkers.storage.fetch_bucket_sizes",
+        return_value={"test-bucket": 1024 * 1024 * 500},  # 500 MB
+    )
+
     # Configure the mock client to return the mock bucket
     mock_client.return_value.list_buckets.return_value = [mock_bucket]
 
@@ -43,6 +49,7 @@ def test_list_buckets_mock(mocker):
     assert b.public_access_prevention == "enforced"
     assert b.versioning_enabled is True
     assert b.uniform_bucket_level_access is True
+    assert b.size_bytes == 524288000
 
     # Verify the client was called correctly
     mock_client.assert_called_once_with(project="test-project")
