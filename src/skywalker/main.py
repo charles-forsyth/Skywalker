@@ -1,41 +1,84 @@
 import argparse
+import sys
 
 from rich.console import Console
+
+# We will import other walkers here as we implement them
+from .walkers import compute
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Skywalker: GCP Audit & Reporting Tool"
     )
-    parser.add_argument("--project-id", help="GCP Project ID to scan")
+    parser.add_argument("--project-id", help="GCP Project ID to scan", required=True)
     parser.add_argument("--zone", help="GCP Zone to scan", default="us-west1-b")
+    parser.add_argument(
+        "--services",
+        nargs="+",
+        default=["compute"],
+        choices=[
+            "compute",
+            "storage",
+            "gke",
+            "vertex",
+            "sql",
+            "iam",
+            "run",
+            "network",
+            "all",
+        ],
+        help="List of services to audit (default: compute)",
+    )
 
     args = parser.parse_args()
 
     console = Console()
     console.print("[bold green]Skywalker[/bold green] initialized.")
 
-    if not args.project_id:
-        console.print("[yellow]No project ID provided. Use --help for usage.[/yellow]")
-        return
+    services = args.services
+    if "all" in services:
+        services = [
+            "compute",
+            "storage",
+            "gke",
+            "vertex",
+            "sql",
+            "iam",
+            "run",
+            "network",
+        ]
 
+    console.print(
+        f"Scanning project [bold cyan]{args.project_id}[/bold cyan] "
+        f"in zone [bold cyan]{args.zone}[/bold cyan]..."
+    )
+
+    # Dispatcher
     try:
-        from .walker import list_instances
-
-        console.print(
-            f"Scanning project [bold cyan]{args.project_id}[/bold cyan] "
-            f"in zone [bold cyan]{args.zone}[/bold cyan]..."
-        )
-        instances = list_instances(project_id=args.project_id, zone=args.zone)
-
-        console.print(f"Found [bold]{len(instances)}[/bold] instances:")
-        for inst in instances:
-            console.print(
-                f" - [green]{inst.name}[/green] ({inst.machine_type}) [{inst.status}]"
+        if "compute" in services:
+            console.print("\n[bold]-- Compute Engine --[/bold]")
+            instances = compute.list_instances(
+                project_id=args.project_id, zone=args.zone
             )
+            console.print(f"Found [bold]{len(instances)}[/bold] instances:")
+            for inst in instances:
+                gpu_text = f" | {len(inst.gpus)} GPUs" if inst.gpus else ""
+                disk_text = f" | {len(inst.disks)} Disks"
+                console.print(
+                    f" - [green]{inst.name}[/green] ({inst.machine_type})"
+                    f" [{inst.status}]{gpu_text}{disk_text}"
+                )
+
+        if "storage" in services:
+            console.print("\n[bold]-- Cloud Storage --[/bold]")
+            console.print("[yellow]Not implemented yet[/yellow]")
+
+        # ... other services placeholders ...
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
