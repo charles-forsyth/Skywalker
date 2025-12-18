@@ -21,8 +21,5 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Install dependencies
-        run: uv pip install -e ".[test]"
-
       - name: Run tests
         run: uv run pytest
