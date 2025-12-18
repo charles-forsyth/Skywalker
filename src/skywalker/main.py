@@ -1,5 +1,7 @@
 import argparse
+import json
 import sys
+from datetime import datetime
 
 import humanize
 from rich.console import Console
@@ -41,9 +43,16 @@ def main() -> None:
         help="List of services to audit (default: all)",
     )
 
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON",
+    )
+
     args = parser.parse_args()
 
-    console = Console()
+    # If JSON is requested, we silence the console for progress updates
+    console = Console(quiet=args.json)
     console.print("[bold green]Skywalker[/bold green] initialized.")
 
     services = args.services
@@ -65,12 +74,20 @@ def main() -> None:
         f"across [bold]{len(regions)}[/bold] regions..."
     )
 
+    # Data container for JSON output
+    report_data = {
+        "project_id": args.project_id,
+        "scan_time": datetime.utcnow().isoformat(),
+        "services": {},
+    }
+
     # Dispatcher
     try:
         # --- Compute Engine (Zonal) ---
         if "compute" in services:
             console.print("\n[bold]-- Compute Engine --[/bold]")
             total_instances = 0
+            compute_results = []
 
             # Generate target zones from regions
             target_zones = []
@@ -89,6 +106,7 @@ def main() -> None:
                         total_instances += len(instances)
                         console.print(f"[bold]{zone}[/bold]: Found {len(instances)}")
                         for inst in instances:
+                            compute_results.append(inst.model_dump(mode="json"))
                             gpu_text = f" | {len(inst.gpus)} GPUs" if inst.gpus else ""
                             disk_text = f" | {len(inst.disks)} Disks"
                             ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
@@ -106,6 +124,7 @@ def main() -> None:
                     # (for now, to keep scanning)
                     pass
 
+            report_data["services"]["compute"] = compute_results
             if total_instances == 0:
                 console.print("No instances found in scanned zones.")
 
@@ -113,6 +132,7 @@ def main() -> None:
         if "run" in services:
             console.print("\n[bold]-- Cloud Run --[/bold]")
             total_services = 0
+            run_results = []
 
             for region in regions:
                 try:
@@ -125,6 +145,7 @@ def main() -> None:
                             f"[bold]{region}[/bold]: Found {len(run_services)}"
                         )
                         for svc in run_services:
+                            run_results.append(svc.model_dump(mode="json"))
                             console.print(
                                 f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
                                 f"   Image: {svc.image}\n"
@@ -134,6 +155,7 @@ def main() -> None:
                 except Exception:
                     pass
 
+            report_data["services"]["run"] = run_results
             if total_services == 0:
                 console.print("No Cloud Run services found in scanned regions.")
 
@@ -141,6 +163,10 @@ def main() -> None:
         if "storage" in services:
             console.print("\n[bold]-- Cloud Storage --[/bold]")
             buckets = storage.list_buckets(project_id=args.project_id)
+            report_data["services"]["storage"] = [
+                b.model_dump(mode="json") for b in buckets
+            ]
+
             console.print(f"Found [bold]{len(buckets)}[/bold] buckets:")
             for b in buckets:
                 pap_status = (
@@ -157,6 +183,10 @@ def main() -> None:
                 )
 
         # ... other services placeholders ...
+
+        # Final JSON Output
+        if args.json:
+            print(json.dumps(report_data, indent=2))
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
