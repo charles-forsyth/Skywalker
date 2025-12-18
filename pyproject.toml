@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "skywalker"
+version = "0.1.0"
+description = "GCP Audit & Reporting Tool for UCR Research Computing ('Ursa Major' Compliance)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Charles Forsyth", email = "charles.forsyth@ucr.edu" }
+]
+license = { text = "MIT" }
+
+# The "Skywalker" Stack
+dependencies = [
+    "google-cloud-compute>=1.0.0",
+    "google-cloud-resourcemanager>=1.0.0",
+    "google-cloud-storage>=2.0.0",
+    "pydantic>=2.0.0",
+    "pandas>=2.0.0",
+    "tenacity>=8.0.0",
+    "rich>=13.0.0",
+    "joblib>=1.3.0",
+    "weasyprint>=60.0.0",
+    "jinja2>=3.1.0"
+]
+
+[project.scripts]
+# This creates the 'skywalker' command in your shell after install
+skywalker = "skywalker.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skywalker"]
+
+# Optional: Configuration for black/isort/ruff if you add linting later
+[tool.ruff]
+line-length = 88
+target-version = "py310"
