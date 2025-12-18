@@ -5,7 +5,7 @@ import humanize
 from rich.console import Console
 
 # We will import other walkers here as we implement them
-from .walkers import compute, storage
+from .walkers import compute, run, storage
 
 
 def main() -> None:
@@ -50,9 +50,12 @@ def main() -> None:
             "network",
         ]
 
+    # Derive region from zone (e.g., us-west1-b -> us-west1)
+    region = "-".join(args.zone.split("-")[:-1])
+
     console.print(
         f"Scanning project [bold cyan]{args.project_id}[/bold cyan] "
-        f"in zone [bold cyan]{args.zone}[/bold cyan]..."
+        f"in zone [bold cyan]{args.zone}[/bold cyan] (Region: {region})..."
     )
 
     # Dispatcher
@@ -74,6 +77,25 @@ def main() -> None:
                 console.print(
                     f" - [green]{inst.name}[/green] ({inst.machine_type})"
                     f" [{inst.status}]{created_text}{gpu_text}{disk_text}{ip_text}"
+                )
+
+        if "run" in services:
+            console.print(f"\n[bold]-- Cloud Run ({region}) --[/bold]")
+            try:
+                run_services = run.list_services(
+                    project_id=args.project_id, region=region
+                )
+                console.print(f"Found [bold]{len(run_services)}[/bold] services:")
+                for svc in run_services:
+                    console.print(
+                        f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
+                        f"   Image: {svc.image}\n"
+                        f"   Updated: {svc.create_time.strftime('%Y-%m-%d')} "
+                        f"| By: {svc.last_modifier}"
+                    )
+            except Exception as e:
+                console.print(
+                    f"[yellow]Could not list Cloud Run services: {e}[/yellow]"
                 )
 
         if "storage" in services:
