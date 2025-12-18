@@ -26,7 +26,7 @@ def main() -> None:
     parser.add_argument(
         "--services",
         nargs="+",
-        default=["compute"],
+        default=["all"],
         choices=[
             "compute",
             "storage",
@@ -38,7 +38,7 @@ def main() -> None:
             "network",
             "all",
         ],
-        help="List of services to audit (default: compute)",
+        help="List of services to audit (default: all)",
     )
 
     args = parser.parse_args()
