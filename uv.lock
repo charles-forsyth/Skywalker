@@ -1903,7 +1903,7 @@ wheels = [
 
 [[package]]
 name = "skywalker"
-version = "0.5.0"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-cloud-aiplatform" },
