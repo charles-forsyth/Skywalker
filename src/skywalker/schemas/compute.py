@@ -6,8 +6,7 @@ from pydantic import BaseModel, Field
 class GCPDisk(BaseModel):
     name: str
     size_gb: int
-    type: str = Field(description="e.g., pd-standard, pd-ssd")
-    status: str
+    type: str = Field(description="e.g., PERSISTENT, SCRATCH")
     boot: bool
 
 

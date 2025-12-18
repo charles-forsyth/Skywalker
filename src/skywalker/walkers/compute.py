@@ -40,8 +40,7 @@ def list_instances(project_id: str, zone: str) -> list[GCPComputeInstance]:
                     GCPDisk(
                         name=d.device_name or "unknown",
                         size_gb=d.disk_size_gb,
-                        type=str(d.type),  # This might be an enum or string URL
-                        status=str(d.status),
+                        type=str(d.type_),  # Use type_ to avoid reserved word
                         boot=d.boot,
                     )
                 )
@@ -52,10 +51,10 @@ def list_instances(project_id: str, zone: str) -> list[GCPComputeInstance]:
         if instance.network_interfaces:
             # Usually the first interface is the primary one
             nic = instance.network_interfaces[0]
-            internal_ip = nic.network_ip
+            internal_ip = nic.network_i_p
             if nic.access_configs:
                 # Access configs hold external IPs (like NAT)
-                external_ip = nic.access_configs[0].nat_ip
+                external_ip = nic.access_configs[0].nat_i_p
 
         results.append(
             GCPComputeInstance(

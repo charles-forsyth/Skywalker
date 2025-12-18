@@ -27,8 +27,7 @@ def test_list_instances_deep_mock(mocker):
     mock_disk = mocker.Mock()
     mock_disk.device_name = "boot-disk"
     mock_disk.disk_size_gb = 100
-    mock_disk.type = "pd-ssd"
-    mock_disk.status = "READY"
+    mock_disk.type_ = "PERSISTENT"
     mock_disk.boot = True
     mock_instance.disks = [mock_disk]
 
@@ -40,9 +39,9 @@ def test_list_instances_deep_mock(mocker):
 
     # Mock Network
     mock_nic = mocker.Mock()
-    mock_nic.network_ip = "10.0.0.1"
+    mock_nic.network_i_p = "10.0.0.1"
     mock_access = mocker.Mock()
-    mock_access.nat_ip = "34.1.2.3"
+    mock_access.nat_i_p = "34.1.2.3"
     mock_nic.access_configs = [mock_access]
     mock_instance.network_interfaces = [mock_nic]
 

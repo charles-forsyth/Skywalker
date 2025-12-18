@@ -65,9 +65,12 @@ def main() -> None:
             for inst in instances:
                 gpu_text = f" | {len(inst.gpus)} GPUs" if inst.gpus else ""
                 disk_text = f" | {len(inst.disks)} Disks"
+                ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
+                if inst.external_ip:
+                    ip_text += f" ({inst.external_ip})"
                 console.print(
                     f" - [green]{inst.name}[/green] ({inst.machine_type})"
-                    f" [{inst.status}]{gpu_text}{disk_text}"
+                    f" [{inst.status}]{gpu_text}{disk_text}{ip_text}"
                 )
 
         if "storage" in services:
