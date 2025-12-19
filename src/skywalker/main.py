@@ -186,7 +186,7 @@ def print_project_summary(data: dict[str, Any], console: Console) -> None:
 
     if "compute" in services:
         report = services["compute"]
-        counts.append(f"[bold]{len(report.instances)}[/bold] VMs")
+        console.print(f" - Compute: [bold]{len(report.instances)}[/bold] VMs")
     if "storage" in services:
         console.print(
             f" - Cloud Storage: [bold]{len(services['storage'])}[/bold] buckets"
