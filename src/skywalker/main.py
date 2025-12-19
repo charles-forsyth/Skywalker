@@ -2,6 +2,7 @@ import argparse
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from importlib.metadata import version
 from typing import Any, cast
 
 import humanize
@@ -391,7 +392,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Skywalker: GCP Audit & Reporting Tool"
     )
-    parser.add_argument("--version", action="version", version="Skywalker v0.18.0")
+    try:
+        ver = version("skywalker")
+    except Exception:
+        ver = "unknown"
+    parser.add_argument("--version", action="version", version=f"Skywalker v{ver}")
     
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("--project-id", help="GCP Project ID to scan")
