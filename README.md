@@ -1,12 +1,12 @@
 # Skywalker 🚀
 
-**GCP Audit & Reporting Tool for UCR Research Computing**
+**GCP Ursa Major Audit Tool for UCR Research Computing**
 
 Skywalker is a high-performance CLI tool designed to "walk" the Google Cloud Platform (GCP) hierarchy to audit resources, validate security compliance (Ursa Major standards), and generate professional reports.
 
 ## Features
 
-- **Fleet Commander:** Automatically discovers and audits ALL active projects in your organization/folder.
+- **Ursa Major Auditor:** Automatically discovers and audits ALL active projects in your organization/folder.
 - **Deep Inspection:** 
     - **Compute Engine:** VMs, Disks, GPUs, IPs.
     - **Cloud Storage:** Bucket sizes (via Monitoring), Public Access Prevention (PAP).
@@ -61,15 +61,15 @@ skywalker --project-id ucr-research-computing --report audit.pdf
 skywalker --project-id ucr-research-computing --services iam network sql
 ```
 
-#### Fleet Audit (Multi-Project)
+#### Ursa Major Audit (Multi-Project)
 Scan all projects you have access to:
 
 ```bash
-# Scan fleet and generate full HTML report
-skywalker --all-projects --html fleet_report.html
+# Scan and generate full HTML report
+skywalker --all-projects --html compliance_report.html
 
-# Export raw data for the entire fleet to JSON
-skywalker --all-projects --json > fleet_data.json
+# Export raw data to JSON
+skywalker --all-projects --json > compliance_data.json
 ```
 
 ## Options
@@ -82,6 +82,8 @@ skywalker --all-projects --json > fleet_data.json
 - `--report` / `--pdf`: Output PDF report.
 - `--html`: Output HTML report.
 - `--concurrency`: Number of concurrent projects to scan (default: 5).
+- `--version`: Show the tool version.
+- `--no-cache`: Force a fresh scan, clearing the local cache.
 
 ## Development
 

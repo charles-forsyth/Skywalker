@@ -399,7 +399,9 @@ def main() -> None:
     log_console = Console(stderr=True, quiet=args.json)
     out_console = Console(quiet=args.json)
 
-    log_console.print("[bold green]Skywalker[/bold green] Fleet Commander initialized.")
+    log_console.print(
+        "[bold green]Skywalker[/bold green] Ursa Major Auditor initialized."
+    )
 
     if args.no_cache:
         from .core import memory
@@ -503,12 +505,16 @@ def main() -> None:
     if args.report or args.html:
         log_console.print("\n[bold]Generating reports...[/bold]")
         try:
-            from .reporter import generate_fleet_report
+            from .reporter import generate_compliance_report
 
             if args.report:
-                generate_fleet_report(all_reports, args.report, output_format="pdf")
+                generate_compliance_report(
+                    all_reports, args.report, output_format="pdf"
+                )
             if args.html:
-                generate_fleet_report(all_reports, args.html, output_format="html")
+                generate_compliance_report(
+                    all_reports, args.html, output_format="html"
+                )
             log_console.print("[green]Reports generated successfully.[/green]")
         except Exception as e:
             log_console.print(f"[bold red]Failed to generate reports: {e}[/bold red]")
