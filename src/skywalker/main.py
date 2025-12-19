@@ -185,6 +185,11 @@ def print_project_summary(data: dict[str, Any], console: Console) -> None:
             f" - IAM: [bold]{len(services['iam'].service_accounts)}[/bold] SAs, "
             f"[bold]{len(services['iam'].policy_bindings)}[/bold] Bindings"
         )
+    if "network" in services:
+        console.print(
+            f" - Network: [bold]{len(services['network'].firewalls)}[/bold] Firewalls, "
+            f"[bold]{len(services['network'].addresses)}[/bold] Static IPs"
+        )
 
 
 def print_project_detailed(data: dict[str, Any], console: Console) -> None:
