@@ -221,16 +221,25 @@
     <table>
         <thead>
             <tr>
-                <th>Member</th>
+                <th>Member Type</th>
+                <th>Principal</th>
                 <th>Role</th>
             </tr>
         </thead>
         <tbody>
             {% for binding in data.services.iam.policy_bindings %}
                 {% if 'roles/owner' in binding.role %}
-                    {% for member in binding.members %}
+                    {% for user in binding.categorized_members.users %}
                     <tr>
-                        <td>{{ member }}</td>
+                        <td><span class="badge bg-blue">User</span></td>
+                        <td>{{ user }}</td>
+                        <td>{{ binding.role }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% for sa in binding.categorized_members.service_accounts %}
+                    <tr>
+                        <td><span class="badge bg-gray">Service Account</span></td>
+                        <td>{{ sa }}</td>
                         <td>{{ binding.role }}</td>
                     </tr>
                     {% endfor %}
