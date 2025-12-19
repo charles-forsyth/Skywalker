@@ -1,7 +1,7 @@
 import pytest
 
 from skywalker.core import memory
-from skywalker.walkers.compute import list_instances
+from skywalker.walkers.compute import list_images, list_instances, list_snapshots
 
 
 @pytest.fixture(autouse=True)
@@ -68,3 +68,41 @@ def test_list_instances_deep_mock(mocker):
     assert inst.external_ip == "34.1.2.3"
 
     mock_client.return_value.list.assert_called_once()
+
+
+def test_list_images_mock(mocker):
+    mock_client = mocker.patch("skywalker.walkers.compute.compute_v1.ImagesClient")
+    
+    mock_img = mocker.Mock()
+    mock_img.name = "my-custom-image"
+    mock_img.id = 999
+    mock_img.disk_size_gb = 50
+    mock_img.status = "READY"
+    mock_img.archive_size_bytes = 1024 * 1024 * 1024 # 1GB
+    mock_img.creation_timestamp = "2023-01-01"
+
+    mock_client.return_value.list.return_value = [mock_img]
+
+    images = list_images("test-project")
+    assert len(images) == 1
+    assert images[0].name == "my-custom-image"
+    assert images[0].archive_size_bytes == 1073741824
+
+
+def test_list_snapshots_mock(mocker):
+    mock_client = mocker.patch("skywalker.walkers.compute.compute_v1.SnapshotsClient")
+    
+    mock_snap = mocker.Mock()
+    mock_snap.name = "my-snapshot"
+    mock_snap.id = 888
+    mock_snap.disk_size_gb = 200
+    mock_snap.status = "READY"
+    mock_snap.storage_bytes = 500000000
+    mock_snap.creation_timestamp = "2023-02-01"
+
+    mock_client.return_value.list.return_value = [mock_snap]
+
+    snaps = list_snapshots("test-project")
+    assert len(snaps) == 1
+    assert snaps[0].name == "my-snapshot"
+    assert snaps[0].disk_size_gb == 200
