@@ -49,3 +49,4 @@ class GCPPolicyBinding(BaseModel):
 class GCPIAMReport(BaseModel):
     service_accounts: list[GCPServiceAccount] = Field(default_factory=list)
     policy_bindings: list[GCPPolicyBinding] = Field(default_factory=list)
+    user_display_names: dict[str, str] = Field(default_factory=dict)

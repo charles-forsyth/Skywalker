@@ -110,12 +110,16 @@ def run_audit_for_project(
 
     # --- IAM (Global) ---
     if "iam" in services:
-        try:
-            report_data["services"]["iam"] = iam.get_iam_report(project_id)
-        except Exception as e:
-            console.print(
-                f"[yellow]Warning: IAM scan failed for {project_id}: {e}[/yellow]"
-            )
+        iam_res = iam.get_iam_report(project_id)
+        # Resolve names early for all reports
+        resolver = UserResolver()
+        for binding in iam_res.policy_bindings:
+            if "roles/owner" in binding.role:
+                for user in binding.categorized_members["users"]:
+                    display_name = resolver.get_display_name(user, interactive=True)
+                    if display_name:
+                        iam_res.user_display_names[user] = display_name
+        report_data["services"]["iam"] = iam_res
 
     # --- Cloud SQL (Global call) ---
     if "sql" in services:
@@ -258,12 +262,11 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
             console.print(f" - {sa.email} ({sa.display_name}) {status}{keys_text}")
 
         console.print("Policy Highlights (Owners):")
-        resolver = UserResolver()
         for binding in iam_report.policy_bindings:
             if "roles/owner" in binding.role:
                 cats = binding.categorized_members
                 for user in cats["users"]:
-                    display_name = resolver.get_display_name(user, interactive=True)
+                    display_name = iam_report.user_display_names.get(user, "")
                     name_str = f" ({display_name})" if display_name else ""
                     console.print(f" - [blue]User[/blue]: {user}{name_str}")
                 for sa in cats["service_accounts"]:

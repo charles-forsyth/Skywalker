@@ -168,7 +168,12 @@
                     {% for user in binding.categorized_members.users %}
                     <tr>
                         <td width="30%"><span class="badge bg-blue">User</span></td>
-                        <td>{{ user }}</td>
+                        <td>
+                            {{ user }}
+                            {% if data.services.iam.user_display_names and data.services.iam.user_display_names[user] %}
+                                <strong>({{ data.services.iam.user_display_names[user] }})</strong>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                     {% for sa in binding.categorized_members.service_accounts %}
