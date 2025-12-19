@@ -24,7 +24,22 @@ def generate_pdf(report_data: dict[str, Any], output_path: str) -> None:
     )
 
     # Register custom filter for humanize
-    env.filters["humanize_size"] = lambda v: humanize.naturalsize(v) if v else "0 Bytes"
+    def humanize_size_filter(v: int | None) -> str:
+        if not v:
+            return "0 Bytes"
+        return str(humanize.naturalsize(v))
+
+    env.filters["humanize_size"] = humanize_size_filter
+
+    def format_date(value: Any) -> str:
+        if isinstance(value, str):
+            # Assume ISO format and just take the date part
+            return value.split("T")[0]
+        if hasattr(value, "strftime"):
+            return value.strftime("%Y-%m-%d")  # type: ignore[no-any-return]
+        return str(value)
+
+    env.filters["format_date"] = format_date
 
     # Render HTML
     template = env.get_template("report.html")
