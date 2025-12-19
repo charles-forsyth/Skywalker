@@ -1,14 +1,38 @@
 import argparse
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from typing import cast
 
 import humanize
 from rich.console import Console
 
 # We will import other walkers here as we implement them
 from .core import STANDARD_REGIONS, ZONE_SUFFIXES
+from .schemas.compute import GCPComputeInstance
+from .schemas.run import GCPCloudRunService
 from .walkers import compute, run, storage
+
+
+def scan_compute_zone(project_id: str, zone: str) -> list[GCPComputeInstance]:
+    try:
+        return cast(
+            list[GCPComputeInstance],
+            compute.list_instances(project_id=project_id, zone=zone),
+        )
+    except Exception:
+        return []
+
+
+def scan_run_region(project_id: str, region: str) -> list[GCPCloudRunService]:
+    try:
+        return cast(
+            list[GCPCloudRunService],
+            run.list_services(project_id=project_id, region=region),
+        )
+    except Exception:
+        return []
 
 
 def main() -> None:
@@ -101,34 +125,41 @@ def main() -> None:
                 for suffix in ZONE_SUFFIXES:
                     target_zones.append(f"{r}-{suffix}")
 
-            # Scan zones
-            # TODO: Parallelize this loop for speed
-            for zone in target_zones:
-                try:
-                    instances = compute.list_instances(
-                        project_id=args.project_id, zone=zone
-                    )
-                    if instances:
-                        total_instances += len(instances)
-                        console.print(f"[bold]{zone}[/bold]: Found {len(instances)}")
-                        for inst in instances:
-                            compute_results.append(inst)
-                            gpu_text = f" | {len(inst.gpus)} GPUs" if inst.gpus else ""
-                            disk_text = f" | {len(inst.disks)} Disks"
-                            ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
-                            if inst.external_ip:
-                                ip_text += f" ({inst.external_ip})"
-                            created_date = inst.creation_timestamp.strftime("%Y-%m-%d")
-                            created_text = f" | Created: {created_date}"
-                            console.print(
-                                f" - [green]{inst.name}[/green] ({inst.machine_type})"
-                                f" [{inst.status}]{created_text}{gpu_text}"
-                                f"{disk_text}{ip_text}"
-                            )
-                except Exception:
-                    # Ignore zones that don't exist or errors
-                    # (for now, to keep scanning)
-                    pass
+            # Parallel Scan
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_zone = {
+                    executor.submit(scan_compute_zone, args.project_id, zone): zone
+                    for zone in target_zones
+                }
+
+                # We want to print results in a sorted/deterministic order,
+                # but streaming them as they complete feels faster.
+                # Let's collect results first, then print.
+                results_map = {}
+                for future in as_completed(future_to_zone):
+                    zone = future_to_zone[future]
+                    results_map[zone] = future.result()
+
+            # Process and Print Results
+            for zone in sorted(results_map.keys()):
+                instances = results_map[zone]
+                if instances:
+                    total_instances += len(instances)
+                    console.print(f"[bold]{zone}[/bold]: Found {len(instances)}")
+                    for inst in instances:
+                        compute_results.append(inst)
+                        gpu_text = f" | {len(inst.gpus)} GPUs" if inst.gpus else ""
+                        disk_text = f" | {len(inst.disks)} Disks"
+                        ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
+                        if inst.external_ip:
+                            ip_text += f" ({inst.external_ip})"
+                        created_date = inst.creation_timestamp.strftime("%Y-%m-%d")
+                        created_text = f" | Created: {created_date}"
+                        console.print(
+                            f" - [green]{inst.name}[/green] ({inst.machine_type})"
+                            f" [{inst.status}]{created_text}{gpu_text}"
+                            f"{disk_text}{ip_text}"
+                        )
 
             report_data["services"]["compute"] = compute_results
             if total_instances == 0:
@@ -140,26 +171,34 @@ def main() -> None:
             total_services = 0
             run_results = []
 
-            for region in regions:
-                try:
-                    run_services = run.list_services(
-                        project_id=args.project_id, region=region
+            # Parallel Scan
+            with ThreadPoolExecutor(max_workers=len(regions)) as run_executor:
+                run_future_to_region = {
+                    run_executor.submit(scan_run_region, args.project_id, r): r
+                    for r in regions
+                }
+
+                run_results_map: dict[str, list[GCPCloudRunService]] = {}
+                for run_future in as_completed(run_future_to_region):
+                    region = run_future_to_region[run_future]
+                    run_results_map[region] = run_future.result()
+
+            # Process and Print Results
+            for region in sorted(run_results_map.keys()):
+                run_services_list = run_results_map[region]
+                if run_services_list:
+                    total_services += len(run_services_list)
+                    console.print(
+                        f"[bold]{region}[/bold]: Found {len(run_services_list)}"
                     )
-                    if run_services:
-                        total_services += len(run_services)
+                    for svc in run_services_list:
+                        run_results.append(svc)
                         console.print(
-                            f"[bold]{region}[/bold]: Found {len(run_services)}"
+                            f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
+                            f"   Image: {svc.image}\n"
+                            f"   Updated: {svc.create_time.strftime('%Y-%m-%d')} "
+                            f"| By: {svc.last_modifier}"
                         )
-                        for svc in run_services:
-                            run_results.append(svc)
-                            console.print(
-                                f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
-                                f"   Image: {svc.image}\n"
-                                f"   Updated: {svc.create_time.strftime('%Y-%m-%d')} "
-                                f"| By: {svc.last_modifier}"
-                            )
-                except Exception:
-                    pass
 
             report_data["services"]["run"] = run_results
             if total_services == 0:
