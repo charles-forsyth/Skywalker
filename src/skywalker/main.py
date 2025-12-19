@@ -15,7 +15,7 @@ from rich.progress import (
 )
 
 from .core import STANDARD_REGIONS, ZONE_SUFFIXES
-from .schemas.compute import GCPComputeInstance
+from .schemas.compute import GCPComputeInstance, GCPComputeReport
 from .schemas.gke import GCPCluster
 from .schemas.run import GCPCloudRunService
 from .schemas.vertex import GCPVertexReport
@@ -75,9 +75,11 @@ def run_audit_for_project(
         "services": {},
     }
 
-    # --- Compute Engine (Zonal) ---
+    # --- Compute Engine (Zonal + Global) ---
     if "compute" in services:
-        compute_results = []
+        compute_report = GCPComputeReport()
+        
+        # 1. Instances (Zonal)
         target_zones = [f"{r}-{s}" for r in regions for s in ZONE_SUFFIXES]
         with ThreadPoolExecutor(max_workers=10) as compute_executor:
             future_to_zone = {
@@ -85,8 +87,18 @@ def run_audit_for_project(
                 for z in target_zones
             }
             for compute_future in as_completed(future_to_zone):
-                compute_results.extend(compute_future.result())
-        report_data["services"]["compute"] = compute_results
+                compute_report.instances.extend(compute_future.result())
+        
+        # 2. Images & Snapshots (Global/Project-level)
+        try:
+            compute_report.images = compute.list_images(project_id)
+            compute_report.snapshots = compute.list_snapshots(project_id)
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: Failed to list images/snapshots: {e}[/yellow]"
+            )
+
+        report_data["services"]["compute"] = compute_report
 
     # --- Cloud Run (Regional) ---
     if "run" in services:
@@ -208,9 +220,11 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
     # 1. Compute
     if "compute" in services:
         console.print("\n[bold]-- Compute Engine --[/bold]")
-        instances = services["compute"]
-        console.print(f"Found [bold]{len(instances)}[/bold] instances:")
-        for inst in instances:
+        report = services["compute"]
+        
+        # Instances
+        console.print(f"Found [bold]{len(report.instances)}[/bold] instances:")
+        for inst in report.instances:
             gpu_text = f" | {len(inst.gpus)} GPUs" if inst.gpus else ""
             disk_text = f" | {len(inst.disks)} Disks"
             ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
@@ -222,6 +236,32 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
                 f" - [green]{inst.name}[/green] ({inst.machine_type})"
                 f" [{inst.status}]{created_text}{gpu_text}{disk_text}{ip_text}"
             )
+            
+        # Images
+        if report.images:
+            console.print(f"\nFound [bold]{len(report.images)}[/bold] Custom Images:")
+            for img in report.images:
+                size_str = (
+                    humanize.naturalsize(img.archive_size_bytes)
+                    if img.archive_size_bytes
+                    else "Unknown"
+                )
+                console.print(
+                    f" - [cyan]{img.name}[/cyan] ({img.status}) | "
+                    f"Size: {size_str} | Disk: {img.disk_size_gb}GB"
+                )
+
+        # Snapshots
+        if report.snapshots:
+            console.print(
+                f"\nFound [bold]{len(report.snapshots)}[/bold] Disk Snapshots:"
+            )
+            for snap in report.snapshots:
+                size_str = humanize.naturalsize(snap.storage_bytes)
+                console.print(
+                    f" - [cyan]{snap.name}[/cyan] ({snap.status}) | "
+                    f"Size: {size_str} | Source Disk: {snap.disk_size_gb}GB"
+                )
 
     # 2. Cloud Run
     if "run" in services:

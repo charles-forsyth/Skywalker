@@ -28,3 +28,27 @@ class GCPComputeInstance(BaseModel):
     gpus: list[GCPGpu] = Field(default_factory=list)
     internal_ip: str | None = None
     external_ip: str | None = None
+
+
+class GCPImage(BaseModel):
+    name: str
+    id: str
+    creation_timestamp: datetime
+    disk_size_gb: int
+    status: str
+    archive_size_bytes: int | None = None
+
+
+class GCPSnapshot(BaseModel):
+    name: str
+    id: str
+    creation_timestamp: datetime
+    disk_size_gb: int
+    status: str
+    storage_bytes: int
+
+
+class GCPComputeReport(BaseModel):
+    instances: list[GCPComputeInstance] = Field(default_factory=list)
+    images: list[GCPImage] = Field(default_factory=list)
+    snapshots: list[GCPSnapshot] = Field(default_factory=list)

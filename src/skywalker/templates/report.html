@@ -51,7 +51,7 @@
             {% for data in report_data %}
             <tr>
                 <td><strong>{{ data.project_id }}</strong></td>
-                <td>{{ data.services.compute | length if data.services.compute else 0 }}</td>
+                <td>{{ data.services.compute.instances | length if data.services.compute and data.services.compute.instances else 0 }}</td>
                 <td>{{ data.services.storage | length if data.services.storage else 0 }}</td>
                 <td>{{ data.services.sql | length if data.services.sql else 0 }}</td>
                 <td>
@@ -79,6 +79,7 @@
     <!-- Compute Engine -->
     {% if data.services.compute %}
     <h3>Compute Engine</h3>
+    <h4>Instances</h4>
     <table>
         <thead>
             <tr>
@@ -90,7 +91,7 @@
             </tr>
         </thead>
         <tbody>
-            {% for inst in data.services.compute %}
+            {% for inst in data.services.compute.instances %}
             <tr>
                 <td>{{ inst.name }}</td>
                 <td>{{ inst.machine_type }}</td>
@@ -102,12 +103,61 @@
                 </td>
                 <td>
                     {% if inst.gpus %}{{ inst.gpus|length }} GPUs<br>{% endif %}
+                    {% if inst.disks %}{{ inst.disks|length }} Disks<br>{% endif %}
                     {% if inst.external_ip %}Ext IP: {{ inst.external_ip }}{% endif %}
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    {% if data.services.compute.images %}
+    <h4>Custom Machine Images</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Disk Size</th>
+                <th>Archive Size</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for img in data.services.compute.images %}
+            <tr>
+                <td>{{ img.name }}</td>
+                <td>{{ img.disk_size_gb }} GB</td>
+                <td>{{ img.archive_size_bytes | humanize_size }}</td>
+                <td>{{ img.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if data.services.compute.snapshots %}
+    <h4>Disk Snapshots</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Source Size</th>
+                <th>Stored Size</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for snap in data.services.compute.snapshots %}
+            <tr>
+                <td>{{ snap.name }}</td>
+                <td>{{ snap.disk_size_gb }} GB</td>
+                <td>{{ snap.storage_bytes | humanize_size }}</td>
+                <td>{{ snap.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
     {% endif %}
 
     <!-- Cloud Storage -->

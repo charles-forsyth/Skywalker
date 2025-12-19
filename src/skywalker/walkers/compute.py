@@ -2,7 +2,13 @@ from google.cloud import compute_v1
 from tenacity import retry
 
 from ..core import RETRY_CONFIG, memory
-from ..schemas.compute import GCPComputeInstance, GCPDisk, GCPGpu
+from ..schemas.compute import (
+    GCPComputeInstance,
+    GCPDisk,
+    GCPGpu,
+    GCPImage,
+    GCPSnapshot,
+)
 
 
 @memory.cache  # type: ignore[untyped-decorator]
@@ -72,4 +78,52 @@ def list_instances(project_id: str, zone: str) -> list[GCPComputeInstance]:
             )
         )
 
+    return results
+
+
+@memory.cache  # type: ignore[untyped-decorator]
+@retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
+def list_images(project_id: str) -> list[GCPImage]:
+    """
+    Lists all custom images in a project.
+    """
+    image_client = compute_v1.ImagesClient()
+    request = compute_v1.ListImagesRequest(project=project_id)
+    
+    results = []
+    for img in image_client.list(request=request):
+        results.append(
+            GCPImage(
+                name=img.name,
+                id=str(img.id),
+                creation_timestamp=img.creation_timestamp, # type: ignore[arg-type]
+                disk_size_gb=img.disk_size_gb,
+                status=img.status,
+                archive_size_bytes=img.archive_size_bytes,
+            )
+        )
+    return results
+
+
+@memory.cache  # type: ignore[untyped-decorator]
+@retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
+def list_snapshots(project_id: str) -> list[GCPSnapshot]:
+    """
+    Lists all disk snapshots in a project.
+    """
+    snapshot_client = compute_v1.SnapshotsClient()
+    request = compute_v1.ListSnapshotsRequest(project=project_id)
+    
+    results = []
+    for snap in snapshot_client.list(request=request):
+        results.append(
+            GCPSnapshot(
+                name=snap.name,
+                id=str(snap.id),
+                creation_timestamp=snap.creation_timestamp, # type: ignore[arg-type]
+                disk_size_gb=snap.disk_size_gb,
+                status=snap.status,
+                storage_bytes=snap.storage_bytes,
+            )
+        )
     return results
