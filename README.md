@@ -24,24 +24,27 @@ Skywalker is a high-performance CLI tool designed to "walk" the Google Cloud Pla
     - **JSON:** Pipeable, structured data for all projects.
     - **PDF/HTML:** Professional compliance reports with executive summaries.
 
-## Getting Started
+## Prerequisites
 
-### 1. Installation
-
-Skywalker is packaged for use with [uv](https://github.com/astral-sh/uv).
-
-```bash
-# Install Skywalker globally
-uv tool install git+https://github.com/charles-forsyth/Skywalker.git
-```
-
-### 2. Authentication
-
+### 1. Authentication
 Skywalker uses Google Cloud Application Default Credentials (ADC).
 
 ```bash
 gcloud auth login
 gcloud auth application-default login
+```
+
+### 2. PDF Rendering (Optional)
+If you intend to use `--report` (PDF), your system must have `pango` and `cairo` installed.
+
+**Ubuntu/Debian:**
+```bash
+sudo apt install libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0
+```
+
+**macOS:**
+```bash
+brew install pango
 ```
 
 ### 3. Usage

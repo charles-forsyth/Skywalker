@@ -486,6 +486,17 @@ def main() -> None:
             log_console.print("[green]Reports generated successfully.[/green]")
         except Exception as e:
             log_console.print(f"[bold red]Failed to generate reports: {e}[/bold red]")
+            # Check for common library missing errors (Pango/Cairo)
+            err_msg = str(e).lower()
+            if "pango" in err_msg or "cairo" in err_msg or "not found" in err_msg:
+                log_console.print(
+                    "\n[yellow]Note: PDF rendering requires system libraries.[/yellow]"
+                )
+                log_console.print(
+                    "Try: [bold]sudo apt install libpango-1.0-0 "
+                    "libharfbuzz0b libpangoft2-1.0-0[/bold] (Ubuntu/Debian)"
+                )
+                log_console.print("Or: [bold]brew install pango[/bold] (macOS)")
 
 
 if __name__ == "__main__":
