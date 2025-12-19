@@ -517,7 +517,9 @@ def main() -> None:
         ) as progress:
             task = progress.add_task("Auditing projects...", total=len(target_projects))
 
-            with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+            executor = ThreadPoolExecutor(max_workers=args.concurrency)
+            futures = {}
+            try:
                 futures = {
                     executor.submit(
                         run_audit_for_project, pid, services, args.regions, log_console
@@ -541,6 +543,13 @@ def main() -> None:
                             f"[/bold red] {e}"
                         )
                     progress.update(task, advance=1)
+            except KeyboardInterrupt:
+                log_console.print("\n[bold red]Cancelling audit...[/bold red]")
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise
+            finally:
+                # Ensure executor is cleaned up if we exit normally
+                executor.shutdown(wait=True)
 
     # 3. Handle Outputs
     if args.json:
