@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from skywalker.reporter import generate_pdf
+from skywalker.schemas.storage import GCPBucket
 
 
 def test_generate_pdf_mock(mocker, tmp_path):
@@ -8,15 +11,18 @@ def test_generate_pdf_mock(mocker, tmp_path):
     # Sample data
     data = {
         "project_id": "test-project",
-        "scan_time": "2023-01-01T00:00:00",
+        "scan_time": datetime(2023, 1, 1),
         "services": {
             "compute": [],
             "storage": [
-                {
-                    "name": "b1",
-                    "size_bytes": 1024,
-                    "public_access_prevention": "enforced",
-                }
+                GCPBucket(
+                    name="b1",
+                    location="US",
+                    storage_class="STANDARD",
+                    creation_timestamp=datetime(2023, 1, 1),
+                    size_bytes=1024,
+                    public_access_prevention="enforced",
+                )
             ],
         },
     }

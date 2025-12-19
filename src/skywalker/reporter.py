@@ -14,7 +14,7 @@ def generate_pdf(report_data: dict[str, Any], output_path: str) -> None:
     total_bytes = 0
     if "storage" in report_data.get("services", {}):
         for b in report_data["services"]["storage"]:
-            total_bytes += b.get("size_bytes") or 0
+            total_bytes += b.size_bytes or 0
 
     # Setup Jinja2 environment
     template_dir = Path(__file__).parent / "templates"
