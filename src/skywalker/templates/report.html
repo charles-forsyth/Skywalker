@@ -75,6 +75,11 @@
             <td>{{ data.services.vertex.notebooks | length if data.services.vertex else 0 }}</td>
             <td>Workbench instances</td>
         </tr>
+        <tr>
+            <td>Firewall Rules</td>
+            <td>{{ data.services.network.firewalls | length if data.services.network else 0 }}</td>
+            <td>Network security policies</td>
+        </tr>
     </table>
 
     <!-- Compute Engine -->
@@ -346,6 +351,67 @@
             </tbody>
         </table>
         {% endif %}
+    {% endif %}
+
+    <!-- Network -->
+    {% if data.services.network %}
+    <h2>Network Security</h2>
+    
+    <h3>Open Firewall Rules (0.0.0.0/0)</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Direction</th>
+                <th>Allowed</th>
+                <th>Target</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fw in data.services.network.firewalls %}
+                {% if '0.0.0.0/0' in fw.source_ranges %}
+                <tr>
+                    <td>{{ fw.name }}</td>
+                    <td>{{ fw.direction }}</td>
+                    <td>
+                        {% for p in fw.allowed_ports %}
+                        {{ p }}<br>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% for t in fw.target_tags %}
+                        Tag: {{ t }}<br>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h3>Unused Static IPs</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Address</th>
+                <th>Name</th>
+                <th>Region</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ip in data.services.network.addresses %}
+                {% if ip.status == 'RESERVED' %}
+                <tr>
+                    <td>{{ ip.address }}</td>
+                    <td>{{ ip.name }}</td>
+                    <td>{{ ip.region }}</td>
+                    <td><span class="badge bg-red">UNUSED</span></td>
+                </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
     {% endif %}
 
     <div class="footer">
