@@ -79,7 +79,7 @@ def run_audit_for_project(
     # --- Compute Engine (Zonal + Global) ---
     if "compute" in services:
         compute_report = GCPComputeReport()
-        
+
         # 1. Instances (Zonal)
         target_zones = [f"{r}-{s}" for r in regions for s in ZONE_SUFFIXES]
         with ThreadPoolExecutor(max_workers=10) as compute_executor:
@@ -89,7 +89,7 @@ def run_audit_for_project(
             }
             for compute_future in as_completed(future_to_zone):
                 compute_report.instances.extend(compute_future.result())
-        
+
         # 2. Images & Snapshots (Global/Project-level)
         try:
             compute_report.images = compute.list_images(project_id)
@@ -222,7 +222,7 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
     if "compute" in services:
         console.print("\n[bold]-- Compute Engine --[/bold]")
         report = services["compute"]
-        
+
         # Instances
         console.print(f"Found [bold]{len(report.instances)}[/bold] instances:")
         for inst in report.instances:
@@ -237,7 +237,7 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
                 f" - [green]{inst.name}[/green] ({inst.machine_type})"
                 f" [{inst.status}]{created_text}{gpu_text}{disk_text}{ip_text}"
             )
-            
+
         # Images
         if report.images:
             console.print(f"\nFound [bold]{len(report.images)}[/bold] Custom Images:")
@@ -397,7 +397,7 @@ def main() -> None:
     except Exception:
         ver = "unknown"
     parser.add_argument("--version", action="version", version=f"Skywalker v{ver}")
-    
+
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("--project-id", help="GCP Project ID to scan")
     group.add_argument(
@@ -450,7 +450,7 @@ def main() -> None:
 
     # Handle Version check (if required=False wasn't enough)
     # The action="version" handles exit automatically if --version is passed.
-    
+
     # Must validate required args manually since group is now optional for --version
     if not args.project_id and not args.all_projects:
         parser.error("one of the arguments --project-id --all-projects is required")
@@ -465,6 +465,7 @@ def main() -> None:
 
     if args.no_cache:
         from .core import memory
+
         log_console.print("[yellow]Clearing local cache...[/yellow]")
         memory.clear(warn=False)
 
@@ -572,9 +573,7 @@ def main() -> None:
                     all_reports, args.report, output_format="pdf"
                 )
             if args.html:
-                generate_compliance_report(
-                    all_reports, args.html, output_format="html"
-                )
+                generate_compliance_report(all_reports, args.html, output_format="html")
             log_console.print("[green]Reports generated successfully.[/green]")
         except Exception as e:
             log_console.print(f"[bold red]Failed to generate reports: {e}[/bold red]")
