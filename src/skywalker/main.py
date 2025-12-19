@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from importlib.metadata import version
@@ -546,7 +547,7 @@ def main() -> None:
             except KeyboardInterrupt:
                 log_console.print("\n[bold red]Cancelling audit...[/bold red]")
                 executor.shutdown(wait=False, cancel_futures=True)
-                raise
+                sys.exit(130)
             finally:
                 # Ensure executor is cleaned up if we exit normally
                 executor.shutdown(wait=True)
