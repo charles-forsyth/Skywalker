@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any, cast
 
+import humanize
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -89,12 +90,10 @@ def run_audit_for_project(
     # --- Cloud Run (Regional) ---
     if "run" in services:
         run_results = []
-        with ThreadPoolExecutor(max_workers=len(regions)) as run_executor:
-            run_futures = [
-                run_executor.submit(scan_run_region, project_id, r) for r in regions
-            ]
-            for run_future in as_completed(run_futures):
-                run_results.extend(run_future.result())
+        with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+            futures = [executor.submit(scan_run_region, project_id, r) for r in regions]
+            for future in as_completed(futures):
+                run_results.extend(future.result())
         report_data["services"]["run"] = run_results
 
     # --- GKE (Regional) ---
@@ -188,6 +187,139 @@ def print_project_summary(data: dict[str, Any], console: Console) -> None:
         )
 
 
+def print_project_detailed(data: dict[str, Any], console: Console) -> None:
+    """Prints full resource details for a single project audit."""
+    project_id = data["project_id"]
+    services = data["services"]
+    console.print(
+        f"\n[bold green underline]DETAILED AUDIT: {project_id}[/bold green underline]"
+    )
+
+    # 1. Compute
+    if "compute" in services:
+        console.print("\n[bold]-- Compute Engine --[/bold]")
+        instances = services["compute"]
+        console.print(f"Found [bold]{len(instances)}[/bold] instances:")
+        for inst in instances:
+            gpu_text = f" | {len(inst.gpus)} GPUs" if inst.gpus else ""
+            disk_text = f" | {len(inst.disks)} Disks"
+            ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
+            if inst.external_ip:
+                ip_text += f" ({inst.external_ip})"
+            created_date = inst.creation_timestamp.strftime("%Y-%m-%d")
+            created_text = f" | Created: {created_date}"
+            console.print(
+                f" - [green]{inst.name}[/green] ({inst.machine_type})"
+                f" [{inst.status}]{created_text}{gpu_text}{disk_text}{ip_text}"
+            )
+
+    # 2. Cloud Run
+    if "run" in services:
+        console.print("\n[bold]-- Cloud Run --[/bold]")
+        run_services = services["run"]
+        console.print(f"Found [bold]{len(run_services)}[/bold] services:")
+        for svc in run_services:
+            console.print(
+                f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
+                f"   Image: {svc.image}\n"
+                f"   Updated: {svc.create_time.strftime('%Y-%m-%d')} "
+                f"| By: {svc.last_modifier}"
+            )
+
+    # 3. GKE
+    if "gke" in services:
+        console.print("\n[bold]-- GKE Clusters --[/bold]")
+        clusters = services["gke"]
+        console.print(f"Found [bold]{len(clusters)}[/bold] clusters:")
+        for cluster in clusters:
+            console.print(
+                f" - [cyan]{cluster.name}[/cyan] ({cluster.version}) [{cluster.status}]"
+            )
+            for np in cluster.node_pools:
+                console.print(
+                    f"   └ Node Pool: [yellow]{np.name}[/yellow] "
+                    f"({np.node_count} nodes, {np.machine_type})"
+                )
+
+    # 4. IAM
+    if "iam" in services:
+        console.print("\n[bold]-- IAM & Security --[/bold]")
+        iam_report = services["iam"]
+        console.print(f"Service Accounts: {len(iam_report.service_accounts)}")
+        for sa in iam_report.service_accounts:
+            status = "[red]DISABLED[/red]" if sa.disabled else "[green]ACTIVE[/green]"
+            keys_text = f" | {len(sa.keys)} Keys" if sa.keys else ""
+            console.print(f" - {sa.email} ({sa.display_name}) {status}{keys_text}")
+
+        console.print("Policy Highlights (Owners):")
+        for binding in iam_report.policy_bindings:
+            if "roles/owner" in binding.role:
+                cats = binding.categorized_members
+                for user in cats["users"]:
+                    console.print(f" - [blue]User[/blue]: {user}")
+                for sa in cats["service_accounts"]:
+                    console.print(f" - [magenta]ServiceAccount[/magenta]: {sa}")
+
+    # 5. SQL
+    if "sql" in services:
+        console.print("\n[bold]-- Cloud SQL --[/bold]")
+        sql_instances = services["sql"]
+        console.print(f"Found [bold]{len(sql_instances)}[/bold] instances:")
+        for db in sql_instances:
+            ip_info = f" | IP: {db.public_ip or db.private_ip or 'None'}"
+            console.print(
+                f" - [cyan]{db.name}[/cyan] ({db.database_version} | "
+                f"{db.tier}) [{db.status}]{ip_info} | "
+                f"{db.storage_limit_gb}GB"
+            )
+
+    # 6. Vertex
+    if "vertex" in services:
+        console.print("\n[bold]-- Vertex AI --[/bold]")
+        vtx = services["vertex"]
+        if vtx.notebooks:
+            console.print(f"Found [bold]{len(vtx.notebooks)}[/bold] Notebooks:")
+            for nb in vtx.notebooks:
+                console.print(
+                    f" - [cyan]{nb.display_name}[/cyan] ({nb.state}) | {nb.creator}"
+                )
+        if vtx.endpoints:
+            console.print(f"Found [bold]{len(vtx.endpoints)}[/bold] Endpoints:")
+            for ep in vtx.endpoints:
+                console.print(
+                    f" - [cyan]{ep.display_name}[/cyan] (Location: {ep.location})"
+                )
+
+    # 7. Network
+    if "network" in services:
+        console.print("\n[bold]-- Network --[/bold]")
+        net = services["network"]
+        console.print(f"Firewalls: {len(net.firewalls)}")
+        for fw in net.firewalls:
+            if "0.0.0.0/0" in fw.source_ranges:
+                console.print(
+                    f" - [bold red]OPEN[/bold red] {fw.name} "
+                    f"({fw.direction}) -> {fw.allowed_ports}"
+                )
+
+    # 8. Storage
+    if "storage" in services:
+        console.print("\n[bold]-- Cloud Storage --[/bold]")
+        buckets = services["storage"]
+        console.print(f"Found [bold]{len(buckets)}[/bold] buckets:")
+        for b in buckets:
+            size_str = humanize.naturalsize(b.size_bytes) if b.size_bytes else "0 Bytes"
+            pap = (
+                f"[green]{b.public_access_prevention}[/green]"
+                if b.public_access_prevention == "enforced"
+                else f"[red]{b.public_access_prevention}[/red]"
+            )
+            console.print(
+                f" - [cyan]{b.name}[/cyan] ({b.location}) | "
+                f"Size: {size_str} | PAP: {pap}"
+            )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Skywalker: GCP Audit & Reporting Tool"
@@ -267,37 +399,54 @@ def main() -> None:
 
     # 2. Batch Execution
     all_reports = []
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
-        console=log_console,
-    ) as progress:
-        task = progress.add_task("Auditing projects...", total=len(target_projects))
+    if len(target_projects) == 1:
+        # Single project: no progress bar, full details
+        pid = target_projects[0]
+        try:
+            result = run_audit_for_project(pid, services, args.regions, out_console)
+            all_reports.append(result)
+            if not args.json:
+                print_project_detailed(result, out_console)
+        except Exception as e:
+            log_console.print(
+                f"[bold red]Failed to audit project {pid}:[/bold red] {e}"
+            )
+    else:
+        # Multi-project: progress bar, summary output
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=log_console,
+        ) as progress:
+            task = progress.add_task("Auditing projects...", total=len(target_projects))
 
-        with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
-            futures = {
-                executor.submit(
-                    run_audit_for_project, pid, services, args.regions, log_console
-                ): pid
-                for pid in target_projects
-            }
+            with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+                futures = {
+                    executor.submit(
+                        run_audit_for_project, pid, services, args.regions, log_console
+                    ): pid
+                    for pid in target_projects
+                }
 
-            for future in as_completed(futures):
-                project_id = futures[future]
-                try:
-                    result = future.result()
-                    all_reports.append(result)
-                    if not args.json:
-                        print_project_summary(result, out_console)
-                except Exception as e:
-                    log_console.print(
-                        f"[bold red]Failed to audit project {project_id}:"
-                        f"[/bold red] {e}"
-                    )
-                progress.update(task, advance=1)
+                for future in as_completed(futures):
+                    project_id = futures[future]
+                    try:
+                        result = future.result()
+                        all_reports.append(result)
+
+                        # Output Logic (Summary for fleet)
+                        if not args.json:
+                            print_project_summary(result, out_console)
+
+                    except Exception as e:
+                        log_console.print(
+                            f"[bold red]Failed to audit project {project_id}:"
+                            f"[/bold red] {e}"
+                        )
+                    progress.update(task, advance=1)
 
     # 3. Handle Outputs
     if args.json:
@@ -315,6 +464,7 @@ def main() -> None:
                         item.model_dump(mode="json") for item in items
                     ]
                 else:
+                    # Single object (like GCPIAMReport or GCPVertexReport)
                     entry["services"][svc_name] = items.model_dump(mode="json")
             json_output.append(entry)
         print(json.dumps(json_output, indent=2))
