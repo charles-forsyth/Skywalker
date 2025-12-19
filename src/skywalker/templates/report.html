@@ -143,6 +143,28 @@
     </table>
     {% endif %}
 
+    {% if data.services.compute.machine_images %}
+    <h4>Machine Images (VM Backups)</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Storage Size</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for img in data.services.compute.machine_images %}
+            <tr>
+                <td>{{ img.name }}</td>
+                <td>{{ img.total_storage_bytes | humanize_size }}</td>
+                <td>{{ img.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
     {% if data.services.compute.snapshots %}
     <h4>Disk Snapshots</h4>
     <table>

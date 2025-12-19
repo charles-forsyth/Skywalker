@@ -39,6 +39,14 @@ class GCPImage(BaseModel):
     archive_size_bytes: int | None = None
 
 
+class GCPMachineImage(BaseModel):
+    name: str
+    id: str
+    creation_timestamp: datetime
+    status: str
+    total_storage_bytes: int | None = None
+
+
 class GCPSnapshot(BaseModel):
     name: str
     id: str
@@ -51,4 +59,5 @@ class GCPSnapshot(BaseModel):
 class GCPComputeReport(BaseModel):
     instances: list[GCPComputeInstance] = Field(default_factory=list)
     images: list[GCPImage] = Field(default_factory=list)
+    machine_images: list[GCPMachineImage] = Field(default_factory=list)
     snapshots: list[GCPSnapshot] = Field(default_factory=list)

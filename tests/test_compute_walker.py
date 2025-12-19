@@ -1,7 +1,12 @@
 import pytest
 
 from skywalker.core import memory
-from skywalker.walkers.compute import list_images, list_instances, list_snapshots
+from skywalker.walkers.compute import (
+    list_images,
+    list_instances,
+    list_machine_images,
+    list_snapshots,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -87,6 +92,26 @@ def test_list_images_mock(mocker):
     assert len(images) == 1
     assert images[0].name == "my-custom-image"
     assert images[0].archive_size_bytes == 1073741824
+
+
+def test_list_machine_images_mock(mocker):
+    mock_client = mocker.patch(
+        "skywalker.walkers.compute.compute_v1.MachineImagesClient"
+    )
+    
+    mock_img = mocker.Mock()
+    mock_img.name = "my-machine-image"
+    mock_img.id = 777
+    mock_img.status = "READY"
+    mock_img.total_storage_bytes = 2048 * 1024 * 1024 # 2GB
+    mock_img.creation_timestamp = "2023-03-01"
+
+    mock_client.return_value.list.return_value = [mock_img]
+
+    images = list_machine_images("test-project")
+    assert len(images) == 1
+    assert images[0].name == "my-machine-image"
+    assert images[0].total_storage_bytes == 2147483648
 
 
 def test_list_snapshots_mock(mocker):
