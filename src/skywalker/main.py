@@ -13,7 +13,7 @@ from .core import STANDARD_REGIONS, ZONE_SUFFIXES
 from .schemas.compute import GCPComputeInstance
 from .schemas.gke import GCPCluster
 from .schemas.run import GCPCloudRunService
-from .walkers import compute, gke, run, storage
+from .walkers import compute, gke, iam, run, storage
 
 
 def scan_compute_zone(project_id: str, zone: str) -> list[GCPComputeInstance]:
@@ -255,6 +255,28 @@ def main() -> None:
             if total_clusters == 0:
                 console.print("No GKE clusters found in scanned regions.")
 
+        # --- IAM (Global) ---
+        if "iam" in services:
+            console.print("\n[bold]-- IAM & Security --[/bold]")
+            iam_report = iam.get_iam_report(project_id=args.project_id)
+            report_data["services"]["iam"] = iam_report
+
+            # Print Service Accounts
+            console.print(f"Service Accounts: {len(iam_report.service_accounts)}")
+            for sa in iam_report.service_accounts:
+                status = (
+                    "[red]DISABLED[/red]" if sa.disabled else "[green]ACTIVE[/green]"
+                )
+                keys_text = f" | {len(sa.keys)} Keys" if sa.keys else ""
+                console.print(f" - {sa.email} ({sa.display_name}) {status}{keys_text}")
+
+            # Print Policy Highlights (Owners)
+            console.print("Policy Highlights (Owners):")
+            for binding in iam_report.policy_bindings:
+                if "roles/owner" in binding.role:
+                    for member in binding.members:
+                        console.print(f" - [bold red]{member}[/bold red]")
+
         # --- Cloud Storage (Global) ---
         if "storage" in services:
             console.print("\n[bold]-- Cloud Storage --[/bold]")
@@ -287,9 +309,13 @@ def main() -> None:
                 "services": {},
             }
             for svc_name, items in report_data["services"].items():
-                json_output["services"][svc_name] = [
-                    item.model_dump(mode="json") for item in items
-                ]
+                if isinstance(items, list):
+                    json_output["services"][svc_name] = [
+                        item.model_dump(mode="json") for item in items
+                    ]
+                else:
+                    # Single object (like GCPIAMReport)
+                    json_output["services"][svc_name] = items.model_dump(mode="json")
             print(json.dumps(json_output, indent=2))
 
         # PDF Output
