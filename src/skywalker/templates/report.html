@@ -65,6 +65,11 @@
             <td>{{ data.services.iam.policy_bindings | length if data.services.iam else 0 }}</td>
             <td>Role bindings</td>
         </tr>
+        <tr>
+            <td>SQL Instances</td>
+            <td>{{ data.services.sql | length if data.services.sql else 0 }}</td>
+            <td>Cloud SQL databases</td>
+        </tr>
     </table>
 
     <!-- Compute Engine -->
@@ -244,6 +249,40 @@
                     </tr>
                     {% endfor %}
                 {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Cloud SQL -->
+    {% if data.services.sql %}
+    <h2>Cloud SQL Instances</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Region</th>
+                <th>Version / Tier</th>
+                <th>Status</th>
+                <th>IP / Storage</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for db in data.services.sql %}
+            <tr>
+                <td>{{ db.name }}</td>
+                <td>{{ db.region }}</td>
+                <td>{{ db.database_version }}<br><small>{{ db.tier }}</small></td>
+                <td>
+                    <span class="badge {% if db.status == 'RUNNABLE' %}bg-green{% else %}bg-gray{% endif %}">
+                        {{ db.status }}
+                    </span>
+                </td>
+                <td>
+                    IP: {{ db.public_ip or db.private_ip or 'None' }}<br>
+                    Disk: {{ db.storage_limit_gb }} GB
+                </td>
+            </tr>
             {% endfor %}
         </tbody>
     </table>
