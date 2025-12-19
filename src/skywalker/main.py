@@ -130,7 +130,7 @@ def run_audit_for_project(
         for binding in iam_res.policy_bindings:
             if "roles/owner" in binding.role:
                 for user in binding.categorized_members["users"]:
-                    display_name = resolver.get_display_name(user, interactive=True)
+                    display_name = resolver.get_display_name(user)
                     if display_name:
                         iam_res.user_display_names[user] = display_name
         report_data["services"]["iam"] = iam_res
