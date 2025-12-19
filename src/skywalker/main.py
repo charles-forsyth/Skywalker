@@ -85,7 +85,9 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--report",
         "--pdf",
+        dest="report",
         help="Output report to a PDF file (e.g., report.pdf)",
     )
 
@@ -208,7 +210,7 @@ def main() -> None:
                             f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
                             f"   Image: {svc.image}\n"
                             f"   Updated: {svc.create_time.strftime('%Y-%m-%d')} "
-                            f"| By: {svc.last_modifier}"
+                            f" | By: {svc.last_modifier}"
                         )
 
             report_data["services"]["run"] = run_results
@@ -314,7 +316,7 @@ def main() -> None:
             # We need to manually serialize the objects now
             json_output = {
                 "project_id": report_data["project_id"],
-                "scan_time": report_data["scan_time"].isoformat(),
+                "scan_time": cast(datetime, report_data["scan_time"]).isoformat(),
                 "services": {},
             }
             for svc_name, items in report_data["services"].items():
@@ -328,12 +330,12 @@ def main() -> None:
             print(json.dumps(json_output, indent=2))
 
         # PDF Output
-        if args.pdf:
-            console.print(f"\n[bold]Generating PDF report: {args.pdf}[/bold]")
+        if args.report:
+            console.print(f"\n[bold]Generating PDF report: {args.report}[/bold]")
             try:
                 from .reporter import generate_pdf
 
-                generate_pdf(report_data, args.pdf)
+                generate_pdf(report_data, args.report)
                 console.print("[green]PDF generated successfully.[/green]")
             except Exception as e:
                 console.print(f"[bold red]Failed to generate PDF: {e}[/bold red]")
