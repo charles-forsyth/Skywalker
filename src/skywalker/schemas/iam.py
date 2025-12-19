@@ -23,6 +23,28 @@ class GCPPolicyBinding(BaseModel):
     role: str
     members: list[str]
 
+    @property
+    def categorized_members(self) -> dict[str, list[str]]:
+        categories: dict[str, list[str]] = {
+            "users": [],
+            "service_accounts": [],
+            "groups": [],
+            "domains": [],
+            "unknown": [],
+        }
+        for m in self.members:
+            if m.startswith("user:"):
+                categories["users"].append(m.split(":")[1])
+            elif m.startswith("serviceAccount:"):
+                categories["service_accounts"].append(m.split(":")[1])
+            elif m.startswith("group:"):
+                categories["groups"].append(m.split(":")[1])
+            elif m.startswith("domain:"):
+                categories["domains"].append(m.split(":")[1])
+            else:
+                categories["unknown"].append(m)
+        return categories
+
 
 class GCPIAMReport(BaseModel):
     service_accounts: list[GCPServiceAccount] = Field(default_factory=list)
