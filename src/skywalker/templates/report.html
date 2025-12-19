@@ -42,27 +42,27 @@
         </tr>
         <tr>
             <td>Compute Instances</td>
-            <td>{{ data.services.compute | length }}</td>
+            <td>{{ data.services.compute | length if data.services.compute else 0 }}</td>
             <td>VMs across scanned zones</td>
         </tr>
         <tr>
             <td>Cloud Storage Buckets</td>
-            <td>{{ data.services.storage | length }}</td>
+            <td>{{ data.services.storage | length if data.services.storage else 0 }}</td>
             <td>Total Bytes: {{ total_bytes | humanize_size }}</td>
         </tr>
         <tr>
             <td>Cloud Run Services</td>
-            <td>{{ data.services.run | length }}</td>
+            <td>{{ data.services.run | length if data.services.run else 0 }}</td>
             <td>Serverless deployments</td>
         </tr>
         <tr>
             <td>GKE Clusters</td>
-            <td>{{ data.services.gke | length }}</td>
+            <td>{{ data.services.gke | length if data.services.gke else 0 }}</td>
             <td>Kubernetes clusters</td>
         </tr>
         <tr>
             <td>IAM Principals</td>
-            <td>{{ data.services.iam.policy_bindings | length }}</td>
+            <td>{{ data.services.iam.policy_bindings | length if data.services.iam else 0 }}</td>
             <td>Role bindings</td>
         </tr>
     </table>
