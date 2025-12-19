@@ -2,18 +2,27 @@
 
 **GCP Audit & Reporting Tool for UCR Research Computing**
 
-Skywalker is a high-performance CLI tool designed to "walk" the Google Cloud Platform (GCP) hierarchy to audit resources, validate security compliance (Ursa Major standards), and generate professional PDF reports.
+Skywalker is a high-performance CLI tool designed to "walk" the Google Cloud Platform (GCP) hierarchy to audit resources, validate security compliance (Ursa Major standards), and generate professional reports.
 
 ## Features
 
-- **Multi-Region Scanning:** Automatically audits the 6 major US regions concurrently.
+- **Fleet Commander:** Automatically discovers and audits ALL active projects in your organization/folder.
 - **Deep Inspection:** 
-    - **Compute Engine:** VMs, Disks, GPUs, and IP addresses.
-    - **Cloud Storage:** Bucket sizes (via Cloud Monitoring), Public Access Prevention (PAP) status, and versioning.
-    - **Cloud Run:** Serverless service metadata and deployment history.
-    - **GKE:** Kubernetes clusters and detailed node pool configurations.
-- **Parallel Execution:** Uses Python's `ThreadPoolExecutor` for ultra-fast scanning.
-- **Reporting:** Generates raw JSON data or professional PDF compliance reports.
+    - **Compute Engine:** VMs, Disks, GPUs, IPs.
+    - **Cloud Storage:** Bucket sizes (via Monitoring), Public Access Prevention (PAP).
+    - **Cloud Run:** Serverless services and revisions.
+    - **GKE:** Clusters and Node Pools.
+    - **Cloud SQL:** Database instances, versions, and public IP exposure.
+    - **Vertex AI:** Notebooks, Models, and Endpoints.
+    - **IAM:** Service Accounts, Keys, and High-Privilege Role analysis.
+    - **Network:** Firewall rules (flagging `0.0.0.0/0`) and Static IPs.
+- **Parallel Execution:** 
+    - Scans multiple projects concurrently.
+    - Scans multiple regions concurrently within each project.
+- **Reporting:** 
+    - **Console:** Rich, color-coded terminal output.
+    - **JSON:** Pipeable, structured data for all projects.
+    - **PDF/HTML:** Professional compliance reports with executive summaries.
 
 ## Getting Started
 
@@ -28,37 +37,48 @@ uv tool install git+https://github.com/charles-forsyth/Skywalker.git
 
 ### 2. Authentication
 
-Skywalker uses Google Cloud Application Default Credentials (ADC). You must authenticate your environment before running the tool.
+Skywalker uses Google Cloud Application Default Credentials (ADC).
 
-**On your local machine:**
 ```bash
-# Install gcloud CLI first, then:
 gcloud auth login
 gcloud auth application-default login
 ```
 
 ### 3. Usage
 
-Run a full audit on a GCP project:
-
+#### Single Project Audit
 ```bash
-# Basic full audit (outputs to terminal)
-skywalker --project-id your-gcp-project-id
+# Basic scan (outputs to terminal)
+skywalker --project-id ucr-research-computing
 
-# Generate a professional PDF report
-skywalker --project-id your-gcp-project-id --pdf audit_report.pdf
-
-# Export raw JSON data for processing
-skywalker --project-id your-gcp-project-id --json > audit.json
+# Generate a PDF report
+skywalker --project-id ucr-research-computing --report audit.pdf
 
 # Audit specific services only
-skywalker --project-id your-gcp-project-id --services storage compute
+skywalker --project-id ucr-research-computing --services iam network sql
 ```
 
-## Advanced Options
+#### Fleet Audit (Multi-Project)
+Scan all projects you have access to:
 
-- `--regions`: List specific regions to scan (default: `us-central1`, `us-west1`, `us-east1`, `us-east4`, `us-west2`, `us-west4`).
+```bash
+# Scan fleet and generate full HTML report
+skywalker --all-projects --html fleet_report.html
+
+# Export raw data for the entire fleet to JSON
+skywalker --all-projects --json > fleet_data.json
+```
+
+## Options
+
+- `--project-id`: Target a single project.
+- `--all-projects`: Discover and scan all active projects.
+- `--regions`: List specific regions to scan (default: Major US regions).
 - `--services`: Choose from `compute`, `storage`, `gke`, `run`, `sql`, `iam`, `vertex`, `network`, or `all`.
+- `--json`: Output JSON to stdout (suppresses logs).
+- `--report` / `--pdf`: Output PDF report.
+- `--html`: Output HTML report.
+- `--concurrency`: Number of concurrent projects to scan (default: 5).
 
 ## Development
 
