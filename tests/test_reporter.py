@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from skywalker.reporter import generate_fleet_report
+from skywalker.reporter import generate_compliance_report
 from skywalker.schemas.iam import GCPIAMReport, GCPPolicyBinding, GCPServiceAccount
 from skywalker.schemas.storage import GCPBucket
 
 
-def test_generate_fleet_report_mock(mocker, tmp_path):
+def test_generate_compliance_report_mock(mocker, tmp_path):
     # Mock WeasyPrint HTML class
     mock_html = mocker.patch("skywalker.reporter.HTML")
 
@@ -49,14 +49,14 @@ def test_generate_fleet_report_mock(mocker, tmp_path):
     output_file = tmp_path / "report.pdf"
 
     # Call the function
-    generate_fleet_report(data, str(output_file), output_format="pdf")
+    generate_compliance_report(data, str(output_file), output_format="pdf")
 
     # Verify HTML was initialized and write_pdf was called
     mock_html.assert_called_once()
     mock_html.return_value.write_pdf.assert_called_once_with(str(output_file))
 
 
-def test_generate_fleet_report_html(tmp_path):
+def test_generate_compliance_report_html(tmp_path):
     # Sample fleet data
     data = [
         {
@@ -69,7 +69,7 @@ def test_generate_fleet_report_html(tmp_path):
     output_file = tmp_path / "report.html"
 
     # Call the function for HTML
-    generate_fleet_report(data, str(output_file), output_format="html")
+    generate_compliance_report(data, str(output_file), output_format="html")
 
     # Verify file was written
     assert output_file.exists()

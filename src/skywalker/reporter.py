@@ -7,8 +7,8 @@ import jinja2
 from weasyprint import HTML
 
 
-def generate_fleet_report(
-    fleet_data: list[dict[str, Any]],
+def generate_compliance_report(
+    report_data: list[dict[str, Any]],
     output_path: str,
     output_format: Literal["html", "pdf"] = "pdf",
 ) -> None:
@@ -41,7 +41,7 @@ def generate_fleet_report(
     # Render HTML
     template = env.get_template("report.html")
     html_content = template.render(
-        fleet_data=fleet_data, scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        report_data=report_data, scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     )
 
     if output_format == "html":
