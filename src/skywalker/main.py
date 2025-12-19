@@ -92,6 +92,7 @@ def run_audit_for_project(
         # 2. Images & Snapshots (Global/Project-level)
         try:
             compute_report.images = compute.list_images(project_id)
+            compute_report.machine_images = compute.list_machine_images(project_id)
             compute_report.snapshots = compute.list_snapshots(project_id)
         except Exception as e:
             console.print(
@@ -249,6 +250,21 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
                 console.print(
                     f" - [cyan]{img.name}[/cyan] ({img.status}) | "
                     f"Size: {size_str} | Disk: {img.disk_size_gb}GB"
+                )
+
+        # Machine Images
+        if report.machine_images:
+            console.print(
+                f"\nFound [bold]{len(report.machine_images)}[/bold] Machine Images:"
+            )
+            for img in report.machine_images:
+                size_str = (
+                    humanize.naturalsize(img.total_storage_bytes)
+                    if img.total_storage_bytes
+                    else "Unknown"
+                )
+                console.print(
+                    f" - [cyan]{img.name}[/cyan] ({img.status}) | Size: {size_str}"
                 )
 
         # Snapshots

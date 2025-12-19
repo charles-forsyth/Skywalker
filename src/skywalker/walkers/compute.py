@@ -7,6 +7,7 @@ from ..schemas.compute import (
     GCPDisk,
     GCPGpu,
     GCPImage,
+    GCPMachineImage,
     GCPSnapshot,
 )
 
@@ -100,6 +101,29 @@ def list_images(project_id: str) -> list[GCPImage]:
                 disk_size_gb=img.disk_size_gb,
                 status=img.status,
                 archive_size_bytes=img.archive_size_bytes,
+            )
+        )
+    return results
+
+
+@memory.cache  # type: ignore[untyped-decorator]
+@retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
+def list_machine_images(project_id: str) -> list[GCPMachineImage]:
+    """
+    Lists all Machine Images (VM Backups) in a project.
+    """
+    client = compute_v1.MachineImagesClient()
+    request = compute_v1.ListMachineImagesRequest(project=project_id)
+    
+    results = []
+    for img in client.list(request=request):
+        results.append(
+            GCPMachineImage(
+                name=img.name,
+                id=str(img.id),
+                creation_timestamp=img.creation_timestamp, # type: ignore[arg-type]
+                status=img.status,
+                total_storage_bytes=img.total_storage_bytes,
             )
         )
     return results
