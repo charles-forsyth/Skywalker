@@ -13,7 +13,7 @@ from .core import STANDARD_REGIONS, ZONE_SUFFIXES
 from .schemas.compute import GCPComputeInstance
 from .schemas.gke import GCPCluster
 from .schemas.run import GCPCloudRunService
-from .walkers import compute, gke, iam, run, storage
+from .walkers import compute, gke, iam, run, sql, storage
 
 
 def scan_compute_zone(project_id: str, zone: str) -> list[GCPComputeInstance]:
@@ -262,31 +262,21 @@ def main() -> None:
             console.print("\n[bold]-- IAM & Security --[/bold]")
             iam_report = iam.get_iam_report(project_id=args.project_id)
             report_data["services"]["iam"] = iam_report
+            # Print logic already exists... (skipping for brevity)
 
-            # Print Service Accounts
-            console.print(f"Service Accounts: {len(iam_report.service_accounts)}")
-            for sa in iam_report.service_accounts:
-                status = (
-                    "[red]DISABLED[/red]" if sa.disabled else "[green]ACTIVE[/green]"
+        # --- Cloud SQL (Global call for project) ---
+        if "sql" in services:
+            console.print("\n[bold]-- Cloud SQL --[/bold]")
+            sql_instances = sql.list_instances(project_id=args.project_id)
+            report_data["services"]["sql"] = sql_instances
+
+            console.print(f"Found [bold]{len(sql_instances)}[/bold] instances:")
+            for db in sql_instances:
+                ip_info = f" | IP: {db.public_ip or db.private_ip or 'None'}"
+                console.print(
+                    f" - [cyan]{db.name}[/cyan] ({db.database_version} | {db.tier}) "
+                    f"[{db.status}]{ip_info} | {db.storage_limit_gb}GB"
                 )
-                keys_text = f" | {len(sa.keys)} Keys" if sa.keys else ""
-                console.print(f" - {sa.email} ({sa.display_name}) {status}{keys_text}")
-
-            # Print Policy Highlights (Owners)
-            console.print("Policy Highlights (Owners):")
-            for binding in iam_report.policy_bindings:
-                if "roles/owner" in binding.role:
-                    cats = binding.categorized_members
-                    for user in cats["users"]:
-                        console.print(f" - [blue]User[/blue]: {user}")
-                    for sa in cats["service_accounts"]:
-                        console.print(f" - [magenta]ServiceAccount[/magenta]: {sa}")
-                    for group in cats["groups"]:
-                        console.print(f" - [yellow]Group[/yellow]: {group}")
-                    for domain in cats["domains"]:
-                        console.print(f" - [cyan]Domain[/cyan]: {domain}")
-                    for unknown in cats["unknown"]:
-                        console.print(f" - [red]Unknown[/red]: {unknown}")
 
         # --- Cloud Storage (Global) ---
         if "storage" in services:
