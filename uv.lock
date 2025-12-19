@@ -1970,7 +1970,7 @@ wheels = [
 
 [[package]]
 name = "skywalker"
-version = "0.18.8"
+version = "0.18.9"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },

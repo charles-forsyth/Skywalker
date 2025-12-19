@@ -592,4 +592,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        from rich.console import Console
+
+        console = Console(stderr=True)
+        console.print("\n[bold red]Operation cancelled by user.[/bold red]")
+        exit(130)
