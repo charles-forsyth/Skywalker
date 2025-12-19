@@ -1,7 +1,7 @@
 from google.cloud import compute_v1
 from tenacity import retry
 
-from ..core import RETRY_CONFIG, memory
+from ..core import RETRY_CONFIG
 from ..schemas.network import (
     GCPVPC,
     GCPAddress,
@@ -26,7 +26,9 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
         items = fw.allowed or fw.denied or []
         for item in items:
             # Use getattr for I_p_protocol as it varies by version
-            p_str = getattr(item, "I_p_protocol", getattr(item, "IP_protocol", "unknown"))
+            p_str = str(
+                getattr(item, "I_p_protocol", getattr(item, "IP_protocol", "unknown"))
+            )
             if item.ports:
                 p_str += f":{','.join(item.ports)}"
             ports.append(p_str)
