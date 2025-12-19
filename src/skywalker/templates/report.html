@@ -102,9 +102,17 @@
                     </span>
                 </td>
                 <td>
-                    {% if inst.gpus %}{{ inst.gpus|length }} GPUs<br>{% endif %}
-                    {% if inst.disks %}{{ inst.disks|length }} Disks<br>{% endif %}
-                    {% if inst.external_ip %}Ext IP: {{ inst.external_ip }}{% endif %}
+                    {% if inst.gpus %}
+                        {% for gpu in inst.gpus %}
+                        <span class="badge bg-gray">{{ gpu.count }}x {{ gpu.name }}</span><br>
+                        {% endfor %}
+                    {% endif %}
+                    {% if inst.disks %}
+                        {% for disk in inst.disks %}
+                        <div>• {{ disk.size_gb }}GB {{ disk.type }}</div>
+                        {% endfor %}
+                    {% endif %}
+                    {% if inst.external_ip %}<div style="margin-top:4px">Ext IP: {{ inst.external_ip }}</div>{% endif %}
                 </td>
             </tr>
             {% endfor %}
