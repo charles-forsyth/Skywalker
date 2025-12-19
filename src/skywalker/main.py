@@ -2,7 +2,7 @@ import argparse
 import json
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import cast
 
 import humanize
@@ -131,7 +131,7 @@ def main() -> None:
     # We store raw Pydantic objects here, and serialize later for JSON.
     report_data = {
         "project_id": args.project_id,
-        "scan_time": datetime.utcnow(),
+        "scan_time": datetime.now(UTC),
         "services": {},
     }
 

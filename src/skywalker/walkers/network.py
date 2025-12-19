@@ -11,7 +11,6 @@ from ..schemas.network import (
 )
 
 
-@memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def get_network_report(project_id: str) -> GCPNetworkReport:
     """
@@ -23,10 +22,13 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
     fw_client = compute_v1.FirewallsClient()
     for fw in fw_client.list(project=project_id):
         ports = []
-        for allowed in fw.allowed:
-            p_str = allowed.IP_protocol
-            if allowed.ports:
-                p_str += f":{','.join(allowed.ports)}"
+        # Rules can have 'allowed' or 'denied'
+        items = fw.allowed or fw.denied or []
+        for item in items:
+            # Use getattr for I_p_protocol as it varies by version
+            p_str = getattr(item, "I_p_protocol", getattr(item, "IP_protocol", "unknown"))
+            if item.ports:
+                p_str += f":{','.join(item.ports)}"
             ports.append(p_str)
 
         report.firewalls.append(
@@ -35,10 +37,10 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
                 network=fw.network.split("/")[-1],
                 direction=fw.direction,
                 priority=fw.priority,
-                action="ALLOW" if fw.allowed else "DENY",  # Simplified logic
-                source_ranges=list(fw.source_ranges),
+                action="ALLOW" if fw.allowed else "DENY",
+                source_ranges=list(fw.source_ranges) if fw.source_ranges else [],
                 allowed_ports=ports,
-                target_tags=list(fw.target_tags),
+                target_tags=list(fw.target_tags) if fw.target_tags else [],
             )
         )
 
@@ -83,7 +85,7 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
                     name=addr.name,
                     address=addr.address,
                     region=region.split("/")[-1],
-                    status=addr.status,
+                    status=str(addr.status),
                     user=addr.users[0].split("/")[-1] if addr.users else None,
                 )
             )
