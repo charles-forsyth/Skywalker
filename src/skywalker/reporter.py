@@ -1,21 +1,20 @@
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import humanize
 import jinja2
 from weasyprint import HTML
 
 
-def generate_pdf(report_data: dict[str, Any], output_path: str) -> None:
+def generate_fleet_report(
+    fleet_data: list[dict[str, Any]],
+    output_path: str,
+    output_format: Literal["html", "pdf"] = "pdf",
+) -> None:
     """
-    Generates a PDF report from the gathered audit data.
+    Generates a consolidated audit report for multiple projects.
     """
-    # Calculate totals for summary
-    total_bytes = 0
-    if "storage" in report_data.get("services", {}):
-        for b in report_data["services"]["storage"]:
-            total_bytes += b.size_bytes or 0
-
     # Setup Jinja2 environment
     template_dir = Path(__file__).parent / "templates"
     env = jinja2.Environment(
@@ -23,27 +22,30 @@ def generate_pdf(report_data: dict[str, Any], output_path: str) -> None:
         autoescape=jinja2.select_autoescape(["html", "xml"]),
     )
 
-    # Register custom filter for humanize
+    # Register custom filters
     def humanize_size_filter(v: int | None) -> str:
         if not v:
             return "0 Bytes"
         return str(humanize.naturalsize(v))
 
-    env.filters["humanize_size"] = humanize_size_filter
-
     def format_date(value: Any) -> str:
         if isinstance(value, str):
-            # Assume ISO format and just take the date part
             return value.split("T")[0]
         if hasattr(value, "strftime"):
             return value.strftime("%Y-%m-%d")  # type: ignore[no-any-return]
         return str(value)
 
+    env.filters["humanize_size"] = humanize_size_filter
     env.filters["format_date"] = format_date
 
     # Render HTML
     template = env.get_template("report.html")
-    html_content = template.render(data=report_data, total_bytes=total_bytes)
+    html_content = template.render(
+        fleet_data=fleet_data, scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
 
-    # Generate PDF
-    HTML(string=html_content).write_pdf(output_path)
+    if output_format == "html":
+        Path(output_path).write_text(html_content, encoding="utf-8")
+    else:
+        # Generate PDF
+        HTML(string=html_content).write_pdf(output_path)
