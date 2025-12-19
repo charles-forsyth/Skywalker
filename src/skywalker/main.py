@@ -19,6 +19,7 @@ from .schemas.compute import GCPComputeInstance
 from .schemas.gke import GCPCluster
 from .schemas.run import GCPCloudRunService
 from .schemas.vertex import GCPVertexReport
+from .users import UserResolver
 from .walkers import compute, gke, iam, network, org, run, sql, storage, vertex
 
 
@@ -257,11 +258,14 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
             console.print(f" - {sa.email} ({sa.display_name}) {status}{keys_text}")
 
         console.print("Policy Highlights (Owners):")
+        resolver = UserResolver()
         for binding in iam_report.policy_bindings:
             if "roles/owner" in binding.role:
                 cats = binding.categorized_members
                 for user in cats["users"]:
-                    console.print(f" - [blue]User[/blue]: {user}")
+                    display_name = resolver.get_display_name(user, interactive=True)
+                    name_str = f" ({display_name})" if display_name else ""
+                    console.print(f" - [blue]User[/blue]: {user}{name_str}")
                 for sa in cats["service_accounts"]:
                     console.print(f" - [magenta]ServiceAccount[/magenta]: {sa}")
 
