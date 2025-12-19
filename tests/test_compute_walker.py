@@ -77,13 +77,13 @@ def test_list_instances_deep_mock(mocker):
 
 def test_list_images_mock(mocker):
     mock_client = mocker.patch("skywalker.walkers.compute.compute_v1.ImagesClient")
-    
+
     mock_img = mocker.Mock()
     mock_img.name = "my-custom-image"
     mock_img.id = 999
     mock_img.disk_size_gb = 50
     mock_img.status = "READY"
-    mock_img.archive_size_bytes = 1024 * 1024 * 1024 # 1GB
+    mock_img.archive_size_bytes = 1024 * 1024 * 1024  # 1GB
     mock_img.creation_timestamp = "2023-01-01"
 
     mock_client.return_value.list.return_value = [mock_img]
@@ -98,12 +98,12 @@ def test_list_machine_images_mock(mocker):
     mock_client = mocker.patch(
         "skywalker.walkers.compute.compute_v1.MachineImagesClient"
     )
-    
+
     mock_img = mocker.Mock()
     mock_img.name = "my-machine-image"
     mock_img.id = 777
     mock_img.status = "READY"
-    mock_img.total_storage_bytes = 2048 * 1024 * 1024 # 2GB
+    mock_img.total_storage_bytes = 2048 * 1024 * 1024  # 2GB
     mock_img.creation_timestamp = "2023-03-01"
 
     mock_client.return_value.list.return_value = [mock_img]
@@ -116,7 +116,7 @@ def test_list_machine_images_mock(mocker):
 
 def test_list_snapshots_mock(mocker):
     mock_client = mocker.patch("skywalker.walkers.compute.compute_v1.SnapshotsClient")
-    
+
     mock_snap = mocker.Mock()
     mock_snap.name = "my-snapshot"
     mock_snap.id = 888

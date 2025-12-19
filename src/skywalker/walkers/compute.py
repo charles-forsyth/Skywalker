@@ -90,14 +90,14 @@ def list_images(project_id: str) -> list[GCPImage]:
     """
     image_client = compute_v1.ImagesClient()
     request = compute_v1.ListImagesRequest(project=project_id)
-    
+
     results = []
     for img in image_client.list(request=request):
         results.append(
             GCPImage(
                 name=img.name,
                 id=str(img.id),
-                creation_timestamp=img.creation_timestamp, # type: ignore[arg-type]
+                creation_timestamp=img.creation_timestamp,  # type: ignore[arg-type]
                 disk_size_gb=img.disk_size_gb,
                 status=img.status,
                 archive_size_bytes=img.archive_size_bytes,
@@ -114,14 +114,14 @@ def list_machine_images(project_id: str) -> list[GCPMachineImage]:
     """
     client = compute_v1.MachineImagesClient()
     request = compute_v1.ListMachineImagesRequest(project=project_id)
-    
+
     results = []
     for img in client.list(request=request):
         results.append(
             GCPMachineImage(
                 name=img.name,
                 id=str(img.id),
-                creation_timestamp=img.creation_timestamp, # type: ignore[arg-type]
+                creation_timestamp=img.creation_timestamp,  # type: ignore[arg-type]
                 status=img.status,
                 total_storage_bytes=img.total_storage_bytes,
             )
@@ -137,14 +137,14 @@ def list_snapshots(project_id: str) -> list[GCPSnapshot]:
     """
     snapshot_client = compute_v1.SnapshotsClient()
     request = compute_v1.ListSnapshotsRequest(project=project_id)
-    
+
     results = []
     for snap in snapshot_client.list(request=request):
         results.append(
             GCPSnapshot(
                 name=snap.name,
                 id=str(snap.id),
-                creation_timestamp=snap.creation_timestamp, # type: ignore[arg-type]
+                creation_timestamp=snap.creation_timestamp,  # type: ignore[arg-type]
                 disk_size_gb=snap.disk_size_gb,
                 status=snap.status,
                 storage_bytes=snap.storage_bytes,
