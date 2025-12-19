@@ -137,7 +137,7 @@
             <tr>
                 <td>{{ svc.name }}</td>
                 <td>{{ svc.region }}</td>
-                <td>{{ svc.create_time.strftime('%Y-%m-%d') }}</td>
+                <td>{{ svc.create_time | format_date }}</td>
                 <td>{{ svc.ingress_traffic }}</td>
             </tr>
             {% endfor %}
