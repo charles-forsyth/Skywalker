@@ -336,7 +336,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Skywalker: GCP Audit & Reporting Tool"
     )
-    group = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument("--version", action="version", version="Skywalker v0.18.0")
+    
+    group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("--project-id", help="GCP Project ID to scan")
     group.add_argument(
         "--all-projects",
@@ -378,14 +380,31 @@ def main() -> None:
         default=5,
         help="Number of projects to scan in parallel (default: 5)",
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Disable and clear local cache for this run",
+    )
 
     args = parser.parse_args()
+
+    # Handle Version check (if required=False wasn't enough)
+    # The action="version" handles exit automatically if --version is passed.
+    
+    # Must validate required args manually since group is now optional for --version
+    if not args.project_id and not args.all_projects:
+        parser.error("one of the arguments --project-id --all-projects is required")
 
     # Use stderr for logs/progress if stdout is piped for JSON
     log_console = Console(stderr=True, quiet=args.json)
     out_console = Console(quiet=args.json)
 
     log_console.print("[bold green]Skywalker[/bold green] Fleet Commander initialized.")
+
+    if args.no_cache:
+        from .core import memory
+        log_console.print("[yellow]Clearing local cache...[/yellow]")
+        memory.clear(warn=False)
 
     services = args.services
     if "all" in services:
