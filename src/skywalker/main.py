@@ -274,8 +274,17 @@ def main() -> None:
             console.print("Policy Highlights (Owners):")
             for binding in iam_report.policy_bindings:
                 if "roles/owner" in binding.role:
-                    for member in binding.members:
-                        console.print(f" - [bold red]{member}[/bold red]")
+                    cats = binding.categorized_members
+                    for user in cats["users"]:
+                        console.print(f" - [blue]User[/blue]: {user}")
+                    for sa in cats["service_accounts"]:
+                        console.print(f" - [magenta]ServiceAccount[/magenta]: {sa}")
+                    for group in cats["groups"]:
+                        console.print(f" - [yellow]Group[/yellow]: {group}")
+                    for domain in cats["domains"]:
+                        console.print(f" - [cyan]Domain[/cyan]: {domain}")
+                    for unknown in cats["unknown"]:
+                        console.print(f" - [red]Unknown[/red]: {unknown}")
 
         # --- Cloud Storage (Global) ---
         if "storage" in services:
