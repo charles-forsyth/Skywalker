@@ -11,8 +11,9 @@ from rich.console import Console
 # We will import other walkers here as we implement them
 from .core import STANDARD_REGIONS, ZONE_SUFFIXES
 from .schemas.compute import GCPComputeInstance
+from .schemas.gke import GCPCluster
 from .schemas.run import GCPCloudRunService
-from .walkers import compute, run, storage
+from .walkers import compute, gke, run, storage
 
 
 def scan_compute_zone(project_id: str, zone: str) -> list[GCPComputeInstance]:
@@ -30,6 +31,16 @@ def scan_run_region(project_id: str, region: str) -> list[GCPCloudRunService]:
         return cast(
             list[GCPCloudRunService],
             run.list_services(project_id=project_id, region=region),
+        )
+    except Exception:
+        return []
+
+
+def scan_gke_location(project_id: str, location: str) -> list[GCPCluster]:
+    try:
+        return cast(
+            list[GCPCluster],
+            gke.list_clusters(project_id=project_id, location=location),
         )
     except Exception:
         return []
@@ -203,6 +214,46 @@ def main() -> None:
             report_data["services"]["run"] = run_results
             if total_services == 0:
                 console.print("No Cloud Run services found in scanned regions.")
+
+        # --- GKE Clusters (Regional) ---
+        if "gke" in services:
+            console.print("\n[bold]-- GKE Clusters --[/bold]")
+            total_clusters = 0
+            gke_results = []
+
+            # Parallel Scan across regions
+            with ThreadPoolExecutor(max_workers=len(regions)) as gke_executor:
+                gke_future_to_location = {
+                    gke_executor.submit(scan_gke_location, args.project_id, r): r
+                    for r in regions
+                }
+
+                gke_results_map: dict[str, list[GCPCluster]] = {}
+                for gke_future in as_completed(gke_future_to_location):
+                    loc = gke_future_to_location[gke_future]
+                    gke_results_map[loc] = gke_future.result()
+
+            # Process and Print Results
+            for loc in sorted(gke_results_map.keys()):
+                clusters = gke_results_map[loc]
+                if clusters:
+                    total_clusters += len(clusters)
+                    console.print(f"[bold]{loc}[/bold]: Found {len(clusters)}")
+                    for cluster in clusters:
+                        gke_results.append(cluster)
+                        console.print(
+                            f" - [cyan]{cluster.name}[/cyan] ({cluster.version}) "
+                            f"[{cluster.status}]"
+                        )
+                        for np in cluster.node_pools:
+                            console.print(
+                                f"   └ Node Pool: [yellow]{np.name}[/yellow] "
+                                f"({np.node_count} nodes, {np.machine_type})"
+                            )
+
+            report_data["services"]["gke"] = gke_results
+            if total_clusters == 0:
+                console.print("No GKE clusters found in scanned regions.")
 
         # --- Cloud Storage (Global) ---
         if "storage" in services:

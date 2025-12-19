@@ -55,6 +55,11 @@
             <td>{{ data.services.run | length }}</td>
             <td>Serverless deployments</td>
         </tr>
+        <tr>
+            <td>GKE Clusters</td>
+            <td>{{ data.services.gke | length }}</td>
+            <td>Kubernetes clusters</td>
+        </tr>
     </table>
 
     <!-- Compute Engine -->
@@ -139,6 +144,41 @@
                 <td>{{ svc.region }}</td>
                 <td>{{ svc.create_time | format_date }}</td>
                 <td>{{ svc.ingress_traffic }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- GKE Clusters -->
+    {% if data.services.gke %}
+    <h2>GKE Clusters</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Location</th>
+                <th>Version</th>
+                <th>Status</th>
+                <th>Node Pools</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cluster in data.services.gke %}
+            <tr>
+                <td>{{ cluster.name }}</td>
+                <td>{{ cluster.location }}</td>
+                <td>{{ cluster.version }}</td>
+                <td>
+                    <span class="badge {% if cluster.status == 'RUNNING' %}bg-green{% else %}bg-gray{% endif %}">
+                        {{ cluster.status }}
+                    </span>
+                </td>
+                <td>
+                    {% for np in cluster.node_pools %}
+                    {{ np.name }}: {{ np.node_count }} nodes ({{ np.machine_type }})<br>
+                    {% endfor %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>
