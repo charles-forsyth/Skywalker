@@ -60,6 +60,11 @@
             <td>{{ data.services.gke | length }}</td>
             <td>Kubernetes clusters</td>
         </tr>
+        <tr>
+            <td>IAM Principals</td>
+            <td>{{ data.services.iam.policy_bindings | length }}</td>
+            <td>Role bindings</td>
+        </tr>
     </table>
 
     <!-- Compute Engine -->
@@ -180,6 +185,56 @@
                     {% endfor %}
                 </td>
             </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- IAM -->
+    {% if data.services.iam %}
+    <h2>IAM & Security</h2>
+    <h3>Service Accounts</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Keys (User Managed)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sa in data.services.iam.service_accounts %}
+            <tr>
+                <td>{{ sa.email }}<br><small>{{ sa.display_name }}</small></td>
+                <td>
+                    <span class="badge {% if not sa.disabled %}bg-green{% else %}bg-red{% endif %}">
+                        {% if sa.disabled %}DISABLED{% else %}ACTIVE{% endif %}
+                    </span>
+                </td>
+                <td>{{ sa.keys | length }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h3>High Privilege Roles (Owners)</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Member</th>
+                <th>Role</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for binding in data.services.iam.policy_bindings %}
+                {% if 'roles/owner' in binding.role %}
+                    {% for member in binding.members %}
+                    <tr>
+                        <td>{{ member }}</td>
+                        <td>{{ binding.role }}</td>
+                    </tr>
+                    {% endfor %}
+                {% endif %}
             {% endfor %}
         </tbody>
     </table>

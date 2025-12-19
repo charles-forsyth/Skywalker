@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from skywalker.reporter import generate_pdf
+from skywalker.schemas.iam import GCPIAMReport, GCPPolicyBinding, GCPServiceAccount
 from skywalker.schemas.storage import GCPBucket
 
 
@@ -24,6 +25,22 @@ def test_generate_pdf_mock(mocker, tmp_path):
                     public_access_prevention="enforced",
                 )
             ],
+            "iam": GCPIAMReport(
+                service_accounts=[
+                    GCPServiceAccount(
+                        email="test-sa@example.com",
+                        unique_id="123",
+                        display_name="Test SA",
+                        description="Test",
+                        disabled=False,
+                    )
+                ],
+                policy_bindings=[
+                    GCPPolicyBinding(
+                        role="roles/owner", members=["user:admin@example.com"]
+                    )
+                ],
+            ),
         },
     }
 
