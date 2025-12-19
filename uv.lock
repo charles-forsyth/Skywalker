@@ -623,6 +623,23 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-notebooks"
+version = "1.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1a/c6/93cd792552616d455fa9e980cf9ef9af0d72e1c95cb2c5d2deec1e186cbd/google_cloud_notebooks-1.14.0.tar.gz", hash = "sha256:9592cab2c5c5c09d2caafc3880aee81475104c9ad898715759e41096852e421f", size = 362460, upload-time = "2025-10-20T14:56:37.62Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f9/ab/3f461b1596c5ffb2871445ae0a7b178beb9f133e1c79242af62866f4a6d1/google_cloud_notebooks-1.14.0-py3-none-any.whl", hash = "sha256:e5d43bf8f034b09fb4be4963fca08697c5c0ba9703a774b0e910fc590e8a3fde", size = 302938, upload-time = "2025-10-20T14:53:18.83Z" },
+]
+
+[[package]]
 name = "google-cloud-resource-manager"
 version = "1.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1953,7 +1970,7 @@ wheels = [
 
 [[package]]
 name = "skywalker"
-version = "0.14.0"
+version = "0.15.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },
@@ -1963,6 +1980,7 @@ dependencies = [
     { name = "google-cloud-functions" },
     { name = "google-cloud-iam" },
     { name = "google-cloud-monitoring" },
+    { name = "google-cloud-notebooks" },
     { name = "google-cloud-resource-manager" },
     { name = "google-cloud-run" },
     { name = "google-cloud-storage" },
@@ -1996,6 +2014,7 @@ requires-dist = [
     { name = "google-cloud-functions", specifier = ">=1.0.0" },
     { name = "google-cloud-iam", specifier = ">=2.0.0" },
     { name = "google-cloud-monitoring", specifier = ">=2.0.0" },
+    { name = "google-cloud-notebooks", specifier = ">=1.0.0" },
     { name = "google-cloud-resource-manager", specifier = ">=1.0.0" },
     { name = "google-cloud-run", specifier = ">=0.10.0" },
     { name = "google-cloud-storage", specifier = ">=2.0.0" },

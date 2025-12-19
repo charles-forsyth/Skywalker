@@ -70,6 +70,11 @@
             <td>{{ data.services.sql | length if data.services.sql else 0 }}</td>
             <td>Cloud SQL databases</td>
         </tr>
+        <tr>
+            <td>Vertex AI Notebooks</td>
+            <td>{{ data.services.vertex.notebooks | length if data.services.vertex else 0 }}</td>
+            <td>Workbench instances</td>
+        </tr>
     </table>
 
     <!-- Compute Engine -->
@@ -286,6 +291,61 @@
             {% endfor %}
         </tbody>
     </table>
+    {% endif %}
+
+    <!-- Vertex AI -->
+    {% if data.services.vertex %}
+        {% if data.services.vertex.notebooks %}
+        <h2>Vertex AI Notebooks</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Location</th>
+                    <th>State</th>
+                    <th>Creator</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for nb in data.services.vertex.notebooks %}
+                <tr>
+                    <td>{{ nb.display_name }}</td>
+                    <td>{{ nb.location }}</td>
+                    <td>
+                        <span class="badge {% if nb.state == 'ACTIVE' %}bg-green{% else %}bg-gray{% endif %}">
+                            {{ nb.state }}
+                        </span>
+                    </td>
+                    <td>{{ nb.creator }}</td>
+                    <td>{{ nb.update_time | format_date }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if data.services.vertex.endpoints %}
+        <h2>Vertex AI Endpoints</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Location</th>
+                    <th>Deployed Models</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ep in data.services.vertex.endpoints %}
+                <tr>
+                    <td>{{ ep.display_name }}</td>
+                    <td>{{ ep.location }}</td>
+                    <td>{{ ep.deployed_models }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
     {% endif %}
 
     <div class="footer">

@@ -13,7 +13,8 @@ from .core import STANDARD_REGIONS, ZONE_SUFFIXES
 from .schemas.compute import GCPComputeInstance
 from .schemas.gke import GCPCluster
 from .schemas.run import GCPCloudRunService
-from .walkers import compute, gke, iam, run, sql, storage
+from .schemas.vertex import GCPVertexReport
+from .walkers import compute, gke, iam, run, sql, storage, vertex
 
 
 def scan_compute_zone(project_id: str, zone: str) -> list[GCPComputeInstance]:
@@ -44,6 +45,16 @@ def scan_gke_location(project_id: str, location: str) -> list[GCPCluster]:
         )
     except Exception:
         return []
+
+
+def scan_vertex_location(project_id: str, location: str) -> GCPVertexReport:
+    try:
+        return cast(
+            GCPVertexReport,
+            vertex.get_vertex_report(project_id=project_id, location=location),
+        )
+    except Exception:
+        return GCPVertexReport()
 
 
 def main() -> None:
@@ -277,6 +288,58 @@ def main() -> None:
                     f" - [cyan]{db.name}[/cyan] ({db.database_version} | {db.tier}) "
                     f"[{db.status}]{ip_info} | {db.storage_limit_gb}GB"
                 )
+
+        # --- Vertex AI (Regional) ---
+        if "vertex" in services:
+            console.print("\n[bold]-- Vertex AI --[/bold]")
+            vertex_results = GCPVertexReport()
+
+            # Parallel Scan
+            with ThreadPoolExecutor(max_workers=len(regions)) as vtx_executor:
+                vtx_future_to_loc = {
+                    vtx_executor.submit(scan_vertex_location, args.project_id, r): r
+                    for r in regions
+                }
+
+                for vtx_future in as_completed(vtx_future_to_loc):
+                    loc = vtx_future_to_loc[vtx_future]
+                    report = vtx_future.result()
+
+                    # Merge results
+                    if report.notebooks:
+                        console.print(
+                            f"[bold]{loc}[/bold]: Found "
+                            f"{len(report.notebooks)} Notebooks"
+                        )
+                        vertex_results.notebooks.extend(report.notebooks)
+                        for nb in report.notebooks:
+                            console.print(
+                                f" - [cyan]{nb.display_name}[/cyan] ({nb.state}) "
+                                f"| {nb.creator}"
+                            )
+
+                    if report.models:
+                        console.print(
+                            f"[bold]{loc}[/bold]: Found {len(report.models)} Models"
+                        )
+                        vertex_results.models.extend(report.models)
+
+                    if report.endpoints:
+                        console.print(
+                            f"[bold]{loc}[/bold]: Found "
+                            f"{len(report.endpoints)} Endpoints"
+                        )
+                        vertex_results.endpoints.extend(report.endpoints)
+
+            report_data["services"]["vertex"] = vertex_results
+
+            has_vertex = (
+                vertex_results.notebooks
+                or vertex_results.models
+                or vertex_results.endpoints
+            )
+            if not has_vertex:
+                console.print("No Vertex AI resources found in scanned regions.")
 
         # --- Cloud Storage (Global) ---
         if "storage" in services:
