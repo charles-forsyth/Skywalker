@@ -14,7 +14,7 @@ from .schemas.compute import GCPComputeInstance
 from .schemas.gke import GCPCluster
 from .schemas.run import GCPCloudRunService
 from .schemas.vertex import GCPVertexReport
-from .walkers import compute, gke, iam, run, sql, storage, vertex
+from .walkers import compute, gke, iam, network, run, sql, storage, vertex
 
 
 def scan_compute_zone(project_id: str, zone: str) -> list[GCPComputeInstance]:
@@ -333,15 +333,41 @@ def main() -> None:
 
             report_data["services"]["vertex"] = vertex_results
 
-            has_vertex = (
+            if not (
                 vertex_results.notebooks
                 or vertex_results.models
                 or vertex_results.endpoints
-            )
-            if not has_vertex:
+            ):
                 console.print("No Vertex AI resources found in scanned regions.")
 
+        # --- Network (Global) ---
+        if "network" in services:
+            console.print("\n[bold]-- Network & Security --[/bold]")
+            net_report = network.get_network_report(project_id=args.project_id)
+            report_data["services"]["network"] = net_report
+
+            # Firewalls
+            console.print(f"Firewalls: {len(net_report.firewalls)}")
+            for fw in net_report.firewalls:
+                # Highlight 0.0.0.0/0
+                if "0.0.0.0/0" in fw.source_ranges:
+                    console.print(
+                        f" - [bold red]OPEN[/bold red] {fw.name} "
+                        f"({fw.direction}) -> {fw.allowed_ports}"
+                    )
+
+            # Static IPs
+            console.print(f"Static IPs: {len(net_report.addresses)}")
+            unused_ips = [ip for ip in net_report.addresses if ip.status == "RESERVED"]
+            if unused_ips:
+                console.print(
+                    f" - [yellow]Unused IPs found: {len(unused_ips)}[/yellow]"
+                )
+                for ip in unused_ips:
+                    console.print(f"   - {ip.address} ({ip.name}) in {ip.region}")
+
         # --- Cloud Storage (Global) ---
+
         if "storage" in services:
             console.print("\n[bold]-- Cloud Storage --[/bold]")
             buckets = storage.list_buckets(project_id=args.project_id)
