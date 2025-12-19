@@ -1,5 +1,11 @@
+import warnings
+
 import joblib
+from joblib.memory import JobLibCollisionWarning
 from tenacity import stop_after_attempt, wait_exponential
+
+# Suppress JobLib collision warnings caused by tenacity wrapping
+warnings.simplefilter("ignore", JobLibCollisionWarning)
 
 # Shared memory cache
 memory = joblib.Memory(location=".cache", verbose=0)
