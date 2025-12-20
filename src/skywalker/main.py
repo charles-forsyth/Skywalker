@@ -391,7 +391,28 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Skywalker: GCP Audit & Reporting Tool"
+        description="Skywalker: GCP Audit & Reporting Tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Audit a single project (all services)
+  skywalker --project-id ucr-research-computing
+
+  # Audit specific services in a specific region
+  skywalker --project-id my-project --services compute storage --regions us-west1
+
+  # Audit ALL active projects and generate an HTML report
+  skywalker --all-projects --html fleet_report.html
+
+  # Generate a PDF report for a single project
+  skywalker --project-id my-project --report audit.pdf
+
+  # Output raw JSON data (for piping to jq)
+  skywalker --project-id my-project --json
+
+  # Force a fresh scan (ignore cache)
+  skywalker --project-id my-project --no-cache
+""",
     )
     try:
         ver = version("skywalker")
