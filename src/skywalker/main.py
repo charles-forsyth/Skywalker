@@ -578,8 +578,11 @@ Examples:
     # The action="version" handles exit automatically if --version is passed.
 
     # Must validate required args manually since group is now optional for --version
-    if not args.project_id and not args.all_projects:
-        parser.error("one of the arguments --project-id --all-projects is required")
+    if not any([args.project_id, args.all_projects, args.scoping_project]):
+        parser.error(
+            "one of the arguments --project-id --all-projects "
+            "--scoping-project is required"
+        )
 
     # Use stderr for logs/progress if stdout is piped for JSON
     log_console = Console(stderr=True, quiet=args.json)
