@@ -21,8 +21,22 @@ def list_instances(project_id: str, location: str) -> list[GCPFilestoreInstance]
             # Extract IPs
             ips = [n.ip_addresses[0] for n in instance.networks if n.ip_addresses]
 
-            # Clean tier name (e.g. Tier.BASIC_HDD)
-            tier_str = str(instance.tier).split(".")[-1]
+            # Clean tier and state names
+            if hasattr(instance.tier, "name"):
+                tier_str = instance.tier.name
+            else:
+                try:
+                    tier_str = filestore_v1.Instance.Tier(instance.tier).name
+                except Exception:
+                    tier_str = str(instance.tier)
+
+            if hasattr(instance.state, "name"):
+                state_str = instance.state.name
+            else:
+                try:
+                    state_str = filestore_v1.Instance.State(instance.state).name
+                except Exception:
+                    state_str = str(instance.state)
 
             capacity = 0
             if instance.file_shares:
@@ -32,7 +46,7 @@ def list_instances(project_id: str, location: str) -> list[GCPFilestoreInstance]
                 GCPFilestoreInstance(
                     name=instance.name.split("/")[-1],
                     tier=tier_str,
-                    state=str(instance.state).split(".")[-1],
+                    state=state_str,
                     capacity_gb=capacity,
                     ip_addresses=ips,
                     create_time=instance.create_time,
