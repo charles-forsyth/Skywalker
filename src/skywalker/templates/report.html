@@ -103,16 +103,16 @@
                     </span>
                 </td>
                 <td>
-                    {% if inst.cpu_utilization is not None %}
+                    {% if inst.cpu_utilization is not none %}
                         <div style="font-weight:bold; color: {% if inst.cpu_utilization > 90 %}#c0392b{% elif inst.cpu_utilization > 70 %}#f39c12{% else %}#27ae60{% endif %};">
                             CPU: {{ "%.1f"|format(inst.cpu_utilization) }}%
                         </div>
                     {% endif %}
-                    {% if inst.memory_usage is not None %}
+                    {% if inst.memory_usage is not none %}
                         <div style="color: #2980b9;">Mem: {{ "%.1f"|format(inst.memory_usage) }}%</div>
                     {% endif %}
                     {% if inst.gpus %}
-                        {% if inst.gpu_utilization is not None %}
+                        {% if inst.gpu_utilization is not none %}
                              <div style="font-weight:bold; color: #8e44ad;">GPU: {{ "%.1f"|format(inst.gpu_utilization) }}%</div>
                         {% else %}
                              <div style="color: #e74c3c; font-weight:bold; font-size:10px;">[No Ops Agent]</div>
