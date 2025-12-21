@@ -626,7 +626,7 @@ Examples:
             # 3. Enrich Data
             enriched_data = []
             for m in metrics_data:
-                iid = m.get("instance_id")
+                iid = str(m.get("instance_id", ""))
                 if iid and iid in assets:
                     m["instance_name"] = assets[iid]["name"]
                     m["machine_type"] = assets[iid]["machine_type"]

@@ -36,21 +36,21 @@ def search_all_instances(scope: str) -> dict[str, dict[str, Any]]:
             }
         )
 
-        for resource in response:
-            # resource.name is the full asset name
-            # resource.display_name is the VM name
-            # resource.additional_attributes is a Struct
-            attrs = resource.additional_attributes
-            instance_id = attrs.get("id")
-
-            if instance_id:
-                results[instance_id] = {
-                    "name": resource.display_name,
-                    "machine_type": attrs.get("machineType", "unknown"),
-                    "zone": resource.location,
-                    "project": resource.project,
-                }
-
+                for resource in response:
+                    # resource.name is the full asset name
+                    # resource.display_name is the VM name
+                    # resource.additional_attributes is a Struct
+                    attrs = resource.additional_attributes
+                    raw_id = attrs.get("id")
+        
+                    if raw_id:
+                        instance_id = str(raw_id)
+                        results[instance_id] = {
+                            "name": resource.display_name,
+                            "machine_type": attrs.get("machineType", "unknown"),
+                            "zone": resource.location,
+                            "project": resource.project,
+                        }
     except Exception:
         # Permission denied or API disabled
         pass
