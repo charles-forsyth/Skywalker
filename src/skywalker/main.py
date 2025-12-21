@@ -4,6 +4,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from importlib.metadata import version
+from pathlib import Path
 from typing import Any, cast
 
 import humanize
