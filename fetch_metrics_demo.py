@@ -25,7 +25,10 @@ try:
     results = client.list_time_series(
         request={
             "name": project_name,
-            "filter": 'metric.type = "compute.googleapis.com/instance/cpu/utilization" AND resource.type = "gce_instance"',
+            "filter": (
+                'metric.type = "compute.googleapis.com/instance/cpu/utilization" '
+                'AND resource.type = "gce_instance"'
+            ),
             "interval": interval,
             "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
         }
@@ -38,15 +41,23 @@ try:
         instance_id = result.resource.labels.get("instance_id", "unknown")
         zone = result.resource.labels.get("zone", "unknown")
         pid = result.resource.labels.get("project_id", "unknown")
-        
+
         # points are returned in reverse time order (newest first)
         if result.points:
             latest_point = result.points[0]
+            cpu_val = latest_point.value.double_value * 100
             # CPU utilization is a double
-            print(f"Project: {pid:<25} | ID: {instance_id:<20} ({zone}) | CPU: {latest_point.value.double_value * 100:>6.2f}%")
-            
+            print(
+                f"Project: {pid:<25} | "
+                f"ID: {instance_id:<20} ({zone}) | "
+                f"CPU: {cpu_val:>6.2f}%"
+            )
+
     if count == 0:
-        print("No data found. (Check if instances are running or if the project ID is correct)")
+        print(
+            "No data found. (Check if instances are running "
+            "or if the project ID is correct)"
+        )
 
 except Exception as e:
     print(f"Error: {e}")
