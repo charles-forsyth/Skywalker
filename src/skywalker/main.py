@@ -655,15 +655,22 @@ Examples:
 
             # HTML Report (if requested)
             if args.html:
-                # Basic HTML dump for now, can be improved with a template later
-                html = df.to_html(classes="table table-striped", border=0)
-                from pathlib import Path
+                import jinja2
+
+                template_dir = Path(__file__).parent / "templates"
+                env = jinja2.Environment(
+                    loader=jinja2.FileSystemLoader(str(template_dir)),
+                    autoescape=jinja2.select_autoescape(["html", "xml"]),
+                )
+                template = env.get_template("fleet_performance.html")
+                html_content = template.render(
+                    data=metrics_data,
+                    scoping_project=args.scoping_project,
+                    scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                )
 
                 with Path(args.html).open("w") as f:
-                    f.write(
-                        f"<html><body><h1>Fleet Performance: "
-                        f"{args.scoping_project}</h1>{html}</body></html>"
-                    )
+                    f.write(html_content)
                 log_console.print(f"Report saved to [bold]{args.html}[/bold]")
 
         except Exception as e:
