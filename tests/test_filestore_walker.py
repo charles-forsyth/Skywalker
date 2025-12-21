@@ -11,20 +11,22 @@ def clear_cache():
 
 def test_list_filestore_instances(mocker):
     # Mock the client
-    mock_client = mocker.patch("skywalker.walkers.filestore.filestore_v1.CloudFilestoreManagerClient")
-    
+    mock_client = mocker.patch(
+        "skywalker.walkers.filestore.filestore_v1.CloudFilestoreManagerClient"
+    )
+
     # Mock Instance
     mock_inst = mocker.Mock()
     mock_inst.name = "projects/p/locations/us-central1/instances/my-nfs"
     mock_inst.tier = "TIER.BASIC_HDD"
     mock_inst.state = "STATE.READY"
     mock_inst.create_time = "2023-01-01"
-    
+
     # Mock Networks
     mock_net = mocker.Mock()
     mock_net.ip_addresses = ["10.0.0.99"]
     mock_inst.networks = [mock_net]
-    
+
     # Mock FileShare
     mock_share = mocker.Mock()
     mock_share.capacity_gb = 1024
