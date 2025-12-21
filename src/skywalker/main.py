@@ -41,6 +41,8 @@ from .walkers import (
     vertex,
 )
 
+DEFAULT_SCOPING_PROJECT = "ucr-research-computing"
+
 
 def scan_compute_zone(
     project_id: str, zone: str, include_metrics: bool = False
@@ -372,7 +374,8 @@ def print_project_detailed(
         for svc in run_services:
             console.print(
                 f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
-                f"   Image: {svc.image}\n"
+                f"   Image: {svc.image}
+"
                 f"   Updated: {svc.create_time.strftime('%Y-%m-%d')} "
                 f"| By: {svc.last_modifier}"
             )
@@ -501,14 +504,11 @@ Examples:
   # Audit ALL active projects and generate an HTML report
   skywalker --all-projects --html fleet_report.html
 
-  # Generate a PDF report for a single project
-  skywalker --project-id my-project --report audit.pdf
+  # Enter Fleet Performance Mode (monitors all projects in Ursa Major scope)
+  skywalker --monitor
 
-  # Output raw JSON data (for piping to jq)
-  skywalker --project-id my-project --json
-
-  # Force a fresh scan (ignore cache)
-  skywalker --project-id my-project --no-cache
+  # Monitor and save to HTML dashboard
+  skywalker --monitor --html fleet_dashboard.html
 """,
     )
     try:
@@ -525,8 +525,14 @@ Examples:
         help="Scan all ACTIVE projects in the organization",
     )
     group.add_argument(
+        "--monitor",
+        action="store_true",
+        help="Enter Fleet Performance Monitoring Mode",
+    )
+
+    parser.add_argument(
         "--scoping-project",
-        help="Monitoring Scoping Project ID for Fleet Performance Mode",
+        help=f"Override default Scoping Project ({DEFAULT_SCOPING_PROJECT})",
     )
     parser.add_argument(
         "--org-id",
@@ -586,14 +592,11 @@ Examples:
 
     args = parser.parse_args()
 
-    # Handle Version check (if required=False wasn't enough)
-    # The action="version" handles exit automatically if --version is passed.
-
     # Must validate required args manually since group is now optional for --version
-    if not any([args.project_id, args.all_projects, args.scoping_project]):
+    if not any([args.project_id, args.all_projects, args.monitor]):
         parser.error(
             "one of the arguments --project-id --all-projects "
-            "--scoping-project is required"
+            "--monitor is required"
         )
 
     # Use stderr for logs/progress if stdout is piped for JSON
@@ -611,19 +614,18 @@ Examples:
         memory.clear(warn=False)
 
     # --- Fleet Performance Mode ---
-    if args.scoping_project:
+    if args.monitor:
+        scoping_proj = args.scoping_project or DEFAULT_SCOPING_PROJECT
         log_console.print(
             f"Entering [bold cyan]Fleet Performance Mode[/bold cyan] "
-            f"via scope: {args.scoping_project}"
+            f"via scope: {scoping_proj}"
         )
 
         try:
             # 1. Fetch Metrics
-            metrics_data = monitoring.fetch_fleet_metrics(args.scoping_project)
+            metrics_data = monitoring.fetch_fleet_metrics(scoping_proj)
 
             # 2. Identify Projects to Scan
-            # We can't search the Organization (403), so we search each Project
-            # found in metrics.
             projects_to_scan = {
                 m.get("project_id") for m in metrics_data if m.get("project_id")
             }
@@ -633,21 +635,32 @@ Examples:
             )
 
             assets = {}
-            with ThreadPoolExecutor(max_workers=20) as executor:
-                # Submit asset search for each project
-                futures = {
-                    executor.submit(
-                        asset.search_all_instances, f"projects/{pid}"
-                    ): pid
-                    for pid in projects_to_scan
-                }
+            # If org-id provided, try huge scan. Else iterate projects.
+            if args.org_id:
+                try:
+                    assets = asset.search_all_instances(f"organizations/{args.org_id}")
+                except Exception:
+                    log_console.print(
+                        "[yellow]Org-level search failed. Falling back to project iteration.[/yellow]"
+                    )
+                    # Fallback logic below...
 
-                for future in as_completed(futures):
-                    try:
-                        project_assets = future.result()
-                        assets.update(project_assets)
-                    except Exception:
-                        pass  # Ignore failures for individual projects
+            if not assets:
+                with ThreadPoolExecutor(max_workers=20) as executor:
+                    # Submit asset search for each project
+                    futures = {
+                        executor.submit(
+                            asset.search_all_instances, f"projects/{pid}"
+                        ): pid
+                        for pid in projects_to_scan
+                    }
+
+                    for future in as_completed(futures):
+                        try:
+                            project_assets = future.result()
+                            assets.update(project_assets)
+                        except Exception:
+                            pass  # Ignore failures for individual projects
 
             # 3. Enrich Data
             enriched_data = []
@@ -723,7 +736,7 @@ Examples:
                 template = env.get_template("fleet_performance.html")
                 html_content = template.render(
                     data=metrics_data,
-                    scoping_project=args.scoping_project,
+                    scoping_project=scoping_proj,
                     scan_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
 
