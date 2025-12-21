@@ -146,13 +146,16 @@ def run_audit_for_project(
                 run_results.extend(future.result())
         report_data["services"]["run"] = run_results
 
-    # --- Filestore (Regional) ---
+    # --- Filestore (Zonal) ---
     if "filestore" in services:
         filestore_results = []
-        with ThreadPoolExecutor(max_workers=len(regions)) as fs_executor:
+        # Filestore instances are strictly zonal resources.
+        # We must scan every zone in the target regions.
+        target_zones = [f"{r}-{s}" for r in regions for s in ZONE_SUFFIXES]
+        with ThreadPoolExecutor(max_workers=10) as fs_executor:
             fs_futures = [
-                fs_executor.submit(scan_filestore_location, project_id, r)
-                for r in regions
+                fs_executor.submit(scan_filestore_location, project_id, z)
+                for z in target_zones
             ]
             for fs_future in as_completed(fs_futures):
                 filestore_results.extend(fs_future.result())
