@@ -573,6 +573,12 @@ Examples:
         help="Number of projects to scan in parallel (default: 5)",
     )
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Number of rows to display in terminal table (default: 20)",
+    )
+    parser.add_argument(
         "--no-cache",
         action="store_true",
         help="Disable and clear local cache for this run",
@@ -675,7 +681,9 @@ Examples:
                 table.add_column("GPU Util %", justify="right")
 
                 # Sort by CPU desc
-                top_cpu = df.sort_values(by="cpu_percent", ascending=False).head(20)
+                top_cpu = df.sort_values(by="cpu_percent", ascending=False).head(
+                    args.limit
+                )
 
                 for _, row in top_cpu.iterrows():
                     cpu_style = "red" if row["cpu_percent"] > 90 else "white"
