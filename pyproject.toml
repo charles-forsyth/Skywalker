@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skywalker"
-version = "0.23.3"
+version = "0.24.0"
 description = "GCP Audit & Reporting Tool for UCR Research Computing ('Ursa Major' Compliance)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,6 +17,7 @@ license = { text = "MIT" }
 dependencies = [
     "google-cloud-compute>=1.0.0",
     "google-cloud-resource-manager>=1.0.0",
+    "google-cloud-asset>=3.0.0",
     "google-cloud-storage>=2.0.0",
     "google-cloud-filestore>=1.0.0",
     "google-cloud-monitoring>=2.0.0",

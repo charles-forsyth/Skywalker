@@ -486,6 +486,19 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-access-context-manager"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/eb/f8dcd4e3c596733f872732b43836df6486fa09966ce5586443d4e9e288fb/google_cloud_access_context_manager-0.3.0.tar.gz", hash = "sha256:f3aa35c9225b7aaef85ecdacedcc1577789be8d458b7a41b6ad23b504786e5f9", size = 46643, upload-time = "2025-10-17T02:33:32.028Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/94/24b010493660dd55e2d9769ae7ef44164aebd7e1f4a9266cf9459affd687/google_cloud_access_context_manager-0.3.0-py3-none-any.whl", hash = "sha256:5d15ad51547f06c281e35f16b4ffcb3e98bb2d898b01470f88b94edfb2eeb0a3", size = 58852, upload-time = "2025-10-17T02:30:33.768Z" },
+]
+
+[[package]]
 name = "google-cloud-aiplatform"
 version = "1.132.0"
 source = { registry = "https://pypi.org/simple" }
@@ -507,6 +520,26 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2d/ab/059eeadb017fc4ef9fce952b862d553d07a75f8ce928e15c1cd0094f42e5/google_cloud_aiplatform-1.132.0.tar.gz", hash = "sha256:345d113ffe2b6f705810453418dc75f3e0ad9354e499be75f6dac5f1464d30b4", size = 9919155, upload-time = "2025-12-17T06:10:11.076Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bf/c6/6aafb41ec97b6ccf103434a28bc5cc7779a955799a68707dfa89969e9490/google_cloud_aiplatform-1.132.0-py2.py3-none-any.whl", hash = "sha256:4e68673a61f6f5700f607fb35baf38015b06351175706fc25b6bc5f436741bd8", size = 8180348, upload-time = "2025-12-17T06:10:07.887Z" },
+]
+
+[[package]]
+name = "google-cloud-asset"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "google-cloud-access-context-manager" },
+    { name = "google-cloud-org-policy" },
+    { name = "google-cloud-os-config" },
+    { name = "grpc-google-iam-v1" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/4b/ea523f677cf7dcfeeee85e6186c35b0500d53aa68711ec103bb1f90871f5/google_cloud_asset-4.1.0.tar.gz", hash = "sha256:00ba110085ff9f284b49961bcb9d2da5b5863fb91643c16d173ed38d73bfe35c", size = 294177, upload-time = "2025-10-17T02:33:43.054Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/01/10/d4b47be9ebbc4aeb6f951af91a1af0991245715f4c5ecdfa8015a58b6272/google_cloud_asset-4.1.0-py3-none-any.whl", hash = "sha256:2ce567bf002ad5099e173f6106393a7abc4782598c5d0d27de7d86ac26736e06", size = 275926, upload-time = "2025-10-17T02:30:52.497Z" },
 ]
 
 [[package]]
@@ -670,6 +703,38 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1a/c6/93cd792552616d455fa9e980cf9ef9af0d72e1c95cb2c5d2deec1e186cbd/google_cloud_notebooks-1.14.0.tar.gz", hash = "sha256:9592cab2c5c5c09d2caafc3880aee81475104c9ad898715759e41096852e421f", size = 362460, upload-time = "2025-10-20T14:56:37.62Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/ab/3f461b1596c5ffb2871445ae0a7b178beb9f133e1c79242af62866f4a6d1/google_cloud_notebooks-1.14.0-py3-none-any.whl", hash = "sha256:e5d43bf8f034b09fb4be4963fca08697c5c0ba9703a774b0e910fc590e8a3fde", size = 302938, upload-time = "2025-10-20T14:53:18.83Z" },
+]
+
+[[package]]
+name = "google-cloud-org-policy"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/69/16/c431329766bf5a22f3acd89673153166b24ecd03c0d07af28cf2a06c710c/google_cloud_org_policy-1.15.0.tar.gz", hash = "sha256:271d16a10e75347eace60d02cde322b2b1b613bcc99917109e0ebf2a4102253a", size = 97541, upload-time = "2025-10-20T14:56:42.07Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/e8/a8a1c85c0daf025a26b71cb165cce013bcea664163ddc2cc9335c5dedec5/google_cloud_org_policy-1.15.0-py3-none-any.whl", hash = "sha256:5da410288236b334b8d05010501ea6180c5dc9e30888ff09488f2f107632f35b", size = 83913, upload-time = "2025-10-20T14:53:23.471Z" },
+]
+
+[[package]]
+name = "google-cloud-os-config"
+version = "1.22.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a3/33/8acc596c684e60597dc0ceec8fec06308879a157a50fd290fa6b61eb013d/google_cloud_os_config-1.22.0.tar.gz", hash = "sha256:d79a310f6fa1ce7470aaa084c70e38dc05d98531f468f821b3a526e4d33a70e4", size = 298029, upload-time = "2025-10-20T14:56:42.974Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/06/d0/3f481524e2ac7b18531cb617b3fb694dbc350c5ea1f2eb2ddd978708c7e8/google_cloud_os_config-1.22.0-py3-none-any.whl", hash = "sha256:92afa402aa3b94d765751907fded1ef5908a6a5322f1fc88dee9e4c7f1cd7e54", size = 261062, upload-time = "2025-10-20T14:53:24.485Z" },
 ]
 
 [[package]]
@@ -2003,11 +2068,12 @@ wheels = [
 
 [[package]]
 name = "skywalker"
-version = "0.23.3"
+version = "0.24.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },
     { name = "google-cloud-aiplatform" },
+    { name = "google-cloud-asset" },
     { name = "google-cloud-compute" },
     { name = "google-cloud-container" },
     { name = "google-cloud-filestore" },
@@ -2043,6 +2109,7 @@ test = [
 requires-dist = [
     { name = "google-api-python-client", specifier = ">=2.0.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.0.0" },
+    { name = "google-cloud-asset", specifier = ">=3.0.0" },
     { name = "google-cloud-compute", specifier = ">=1.0.0" },
     { name = "google-cloud-container", specifier = ">=2.0.0" },
     { name = "google-cloud-filestore", specifier = ">=1.0.0" },
