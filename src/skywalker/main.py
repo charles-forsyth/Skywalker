@@ -7,6 +7,7 @@ from importlib.metadata import version
 from typing import Any, cast
 
 import humanize
+import pandas as pd
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -15,6 +16,7 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
+from rich.table import Table
 
 from .core import STANDARD_REGIONS, ZONE_SUFFIXES
 from .schemas.compute import GCPComputeInstance, GCPComputeReport
@@ -28,6 +30,7 @@ from .walkers import (
     filestore,
     gke,
     iam,
+    monitoring,
     network,
     org,
     run,
@@ -519,6 +522,10 @@ Examples:
         action="store_true",
         help="Scan all ACTIVE projects in the organization",
     )
+    group.add_argument(
+        "--scoping-project",
+        help="Monitoring Scoping Project ID for Fleet Performance Mode",
+    )
 
     parser.add_argument(
         "--regions",
@@ -547,6 +554,7 @@ Examples:
     )
 
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
+    parser.add_argument("--csv", help="Output fleet performance data to CSV file")
     parser.add_argument(
         "--metrics", action="store_true", help="Include performance metrics (CPU/Mem)"
     )
@@ -586,6 +594,79 @@ Examples:
 
         log_console.print("[yellow]Clearing local cache...[/yellow]")
         memory.clear(warn=False)
+
+    # --- Fleet Performance Mode ---
+    if args.scoping_project:
+        log_console.print(
+            f"Entering [bold cyan]Fleet Performance Mode[/bold cyan] "
+            f"via scope: {args.scoping_project}"
+        )
+
+        try:
+            metrics_data = monitoring.fetch_fleet_metrics(args.scoping_project)
+            df = pd.DataFrame(metrics_data)
+
+            if df.empty:
+                log_console.print("[yellow]No metrics found in scope.[/yellow]")
+                return
+
+            # Fill NaNs for cleaner output
+            df.fillna(0, inplace=True)
+
+            # Console Output (Rich Table)
+            if not args.json:
+                table = Table(title="Fleet Top Consumers")
+                table.add_column("Project", style="cyan")
+                table.add_column("Instance ID", style="green")
+                table.add_column("CPU %", justify="right")
+                table.add_column("Mem %", justify="right")
+                table.add_column("GPU Util %", justify="right")
+
+                # Sort by CPU desc
+                top_cpu = df.sort_values(by="cpu_percent", ascending=False).head(20)
+
+                for _, row in top_cpu.iterrows():
+                    cpu_style = "red" if row["cpu_percent"] > 90 else "white"
+                    gpu_style = "magenta" if row["gpu_utilization"] > 0 else "dim"
+
+                    table.add_row(
+                        str(row["project_id"]),
+                        str(row["instance_id"]),
+                        f"[{cpu_style}]{row['cpu_percent']:.1f}%[/{cpu_style}]",
+                        f"{row['memory_percent']:.1f}%",
+                        f"[{gpu_style}]{row['gpu_utilization']:.1f}%[/{gpu_style}]",
+                    )
+                out_console.print(table)
+                out_console.print(
+                    f"\nTotal Instances Monitored: [bold]{len(df)}[/bold]"
+                )
+
+            # JSON Output
+            if args.json:
+                print(df.to_json(orient="records"))
+
+            # CSV Output
+            if args.csv:
+                df.to_csv(args.csv, index=False)
+                log_console.print(f"Data saved to [bold]{args.csv}[/bold]")
+
+            # HTML Report (if requested)
+            if args.html:
+                # Basic HTML dump for now, can be improved with a template later
+                html = df.to_html(classes="table table-striped", border=0)
+                from pathlib import Path
+
+                with Path(args.html).open("w") as f:
+                    f.write(
+                        f"<html><body><h1>Fleet Performance: "
+                        f"{args.scoping_project}</h1>{html}</body></html>"
+                    )
+                log_console.print(f"Report saved to [bold]{args.html}[/bold]")
+
+        except Exception as e:
+            log_console.print(f"[bold red]Fleet Audit Failed:[/bold red] {e}")
+
+        return
 
     services = args.services
     if "all" in services:
