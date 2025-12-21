@@ -87,6 +87,7 @@
                 <th>Type</th>
                 <th>Zone</th>
                 <th>Status</th>
+                <th>Performance</th>
                 <th>Details</th>
             </tr>
         </thead>
@@ -100,6 +101,19 @@
                     <span class="badge {% if inst.status == 'RUNNING' %}bg-green{% else %}bg-gray{% endif %}">
                         {{ inst.status }}
                     </span>
+                </td>
+                <td>
+                    {% if inst.cpu_utilization is not None %}
+                        <div style="font-weight:bold; color: {% if inst.cpu_utilization > 90 %}#c0392b{% elif inst.cpu_utilization > 70 %}#f39c12{% else %}#27ae60{% endif %};">
+                            CPU: {{ "%.1f"|format(inst.cpu_utilization) }}%
+                        </div>
+                    {% endif %}
+                    {% if inst.memory_usage is not None %}
+                        <div style="color: #2980b9;">Mem: {{ "%.1f"|format(inst.memory_usage) }}%</div>
+                    {% endif %}
+                    {% if inst.cpu_utilization is none and inst.memory_usage is none %}
+                        -
+                    {% endif %}
                 </td>
                 <td>
                     {% if inst.gpus %}

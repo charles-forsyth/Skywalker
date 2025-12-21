@@ -28,6 +28,8 @@ class GCPComputeInstance(BaseModel):
     gpus: list[GCPGpu] = Field(default_factory=list)
     internal_ip: str | None = None
     external_ip: str | None = None
+    cpu_utilization: float | None = Field(default=None, description="Recent CPU %")
+    memory_usage: float | None = Field(default=None, description="Recent Mem %")
 
 
 class GCPImage(BaseModel):

@@ -1,4 +1,6 @@
-from google.cloud import compute_v1
+import time
+
+from google.cloud import compute_v1, monitoring_v3
 from tenacity import retry
 
 from ..core import RETRY_CONFIG, memory
@@ -12,9 +14,83 @@ from ..schemas.compute import (
 )
 
 
+def _fetch_performance_metrics(
+    project_id: str, zone: str
+) -> dict[str, dict[str, float]]:
+    """
+    Fetches recent CPU and Memory metrics for all instances in a zone.
+    Returns a dict mapping instance_id -> { 'cpu': float, 'mem': float }
+    """
+    client = monitoring_v3.MetricServiceClient()
+    project_name = f"projects/{project_id}"
+
+    # Last 10 minutes to ensure we catch a data point
+    now = time.time()
+    seconds = int(now)
+    nanos = int((now - seconds) * 10**9)
+    interval = monitoring_v3.TimeInterval(
+        {
+            "end_time": {"seconds": seconds, "nanos": nanos},
+            "start_time": {"seconds": (seconds - 600), "nanos": nanos},
+        }
+    )
+
+    metrics_map: dict[str, dict[str, float]] = {}
+
+    # 1. CPU Utilization
+    try:
+        cpu_filter = (
+            'metric.type = "compute.googleapis.com/instance/cpu/utilization" '
+            f'AND resource.labels.zone = "{zone}"'
+        )
+        cpu_results = client.list_time_series(
+            request={
+                "name": project_name,
+                "filter": cpu_filter,
+                "interval": interval,
+                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+            }
+        )
+        for ts in cpu_results:
+            instance_id = ts.resource.labels.get("instance_id")
+            if instance_id and ts.points:
+                metrics_map.setdefault(instance_id, {})["cpu"] = (
+                    ts.points[0].value.double_value * 100
+                )
+    except Exception:
+        pass
+
+    # 2. Memory Usage (requires Ops Agent for deep metrics)
+    try:
+        mem_filter = (
+            'metric.type = "agent.googleapis.com/memory/percent_used" '
+            f'AND resource.labels.zone = "{zone}"'
+        )
+        mem_results = client.list_time_series(
+            request={
+                "name": project_name,
+                "filter": mem_filter,
+                "interval": interval,
+                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+            }
+        )
+        for ts in mem_results:
+            instance_id = ts.resource.labels.get("instance_id")
+            if instance_id and ts.points:
+                metrics_map.setdefault(instance_id, {})["mem"] = ts.points[
+                    0
+                ].value.double_value
+    except Exception:
+        pass
+
+    return metrics_map
+
+
 @memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
-def list_instances(project_id: str, zone: str) -> list[GCPComputeInstance]:
+def list_instances(
+    project_id: str, zone: str, include_metrics: bool = False
+) -> list[GCPComputeInstance]:
     """
     Lists all instances in a given zone for a project with deep details.
     Cached by joblib and retried by tenacity on failure.
@@ -24,7 +100,15 @@ def list_instances(project_id: str, zone: str) -> list[GCPComputeInstance]:
 
     results = []
 
+    # Optional metrics fetch for the entire zone
+    metrics = {}
+    if include_metrics:
+        metrics = _fetch_performance_metrics(project_id, zone)
+
     for instance in instance_client.list(request=request):
+        # ... (rest of the logic remains same, just update the constructor)
+        iid = str(instance.id)
+        inst_metrics = metrics.get(iid, {})
         # 1. Clean Machine Type
         m_type = instance.machine_type
         machine_type_clean = m_type.split("/")[-1] if m_type else "unknown"
@@ -76,6 +160,8 @@ def list_instances(project_id: str, zone: str) -> list[GCPComputeInstance]:
                 gpus=gpus,
                 internal_ip=internal_ip,
                 external_ip=external_ip,
+                cpu_utilization=inst_metrics.get("cpu"),
+                memory_usage=inst_metrics.get("mem"),
             )
         )
 

@@ -25,11 +25,15 @@ from .users import UserResolver
 from .walkers import compute, gke, iam, network, org, run, sql, storage, vertex
 
 
-def scan_compute_zone(project_id: str, zone: str) -> list[GCPComputeInstance]:
+def scan_compute_zone(
+    project_id: str, zone: str, include_metrics: bool = False
+) -> list[GCPComputeInstance]:
     try:
         return cast(
             list[GCPComputeInstance],
-            compute.list_instances(project_id=project_id, zone=zone),
+            compute.list_instances(
+                project_id=project_id, zone=zone, include_metrics=include_metrics
+            ),
         )
     except Exception:
         return []
@@ -66,7 +70,11 @@ def scan_vertex_location(project_id: str, location: str) -> GCPVertexReport:
 
 
 def run_audit_for_project(
-    project_id: str, services: list[str], regions: list[str], console: Console
+    project_id: str,
+    services: list[str],
+    regions: list[str],
+    console: Console,
+    include_metrics: bool = False,
 ) -> dict[str, Any]:
     """
     Executes all requested walkers for a single project and returns the combined data.
@@ -85,7 +93,9 @@ def run_audit_for_project(
         target_zones = [f"{r}-{s}" for r in regions for s in ZONE_SUFFIXES]
         with ThreadPoolExecutor(max_workers=10) as compute_executor:
             future_to_zone = {
-                compute_executor.submit(scan_compute_zone, project_id, z): z
+                compute_executor.submit(
+                    scan_compute_zone, project_id, z, include_metrics
+                ): z
                 for z in target_zones
             }
             for compute_future in as_completed(future_to_zone):
@@ -232,11 +242,24 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
             ip_text = f" | IP: {inst.internal_ip or 'N/A'}"
             if inst.external_ip:
                 ip_text += f" ({inst.external_ip})"
+
+            perf_text = ""
+            if inst.cpu_utilization is not None:
+                color = "green" if inst.cpu_utilization < 70 else "yellow"
+                if inst.cpu_utilization > 90:
+                    color = "red"
+                perf_text += (
+                    f" | [bold {color}]CPU: {inst.cpu_utilization:.1f}%[/bold {color}]"
+                )
+            if inst.memory_usage is not None:
+                perf_text += f" | [bold blue]Mem: {inst.memory_usage:.1f}%[/bold blue]"
+
             created_date = inst.creation_timestamp.strftime("%Y-%m-%d")
             created_text = f" | Created: {created_date}"
             console.print(
                 f" - [green]{inst.name}[/green] ({inst.machine_type})"
                 f" [{inst.status}]{created_text}{gpu_text}{disk_text}{ip_text}"
+                f"{perf_text}"
             )
 
         # Images
@@ -454,6 +477,9 @@ Examples:
     )
 
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
+    parser.add_argument(
+        "--metrics", action="store_true", help="Include performance metrics (CPU/Mem)"
+    )
     parser.add_argument("--report", "--pdf", dest="report", help="Output report to PDF")
     parser.add_argument("--html", help="Output report to an HTML file")
     parser.add_argument(
@@ -519,7 +545,9 @@ Examples:
         # Single project: no progress bar, full details
         pid = target_projects[0]
         try:
-            result = run_audit_for_project(pid, services, args.regions, out_console)
+            result = run_audit_for_project(
+                pid, services, args.regions, out_console, args.metrics
+            )
             all_reports.append(result)
             if not args.json:
                 print_project_detailed(result, out_console)
@@ -544,7 +572,12 @@ Examples:
             try:
                 futures = {
                     executor.submit(
-                        run_audit_for_project, pid, services, args.regions, log_console
+                        run_audit_for_project,
+                        pid,
+                        services,
+                        args.regions,
+                        log_console,
+                        args.metrics,
                     ): pid
                     for pid in target_projects
                 }

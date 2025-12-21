@@ -131,3 +131,53 @@ def test_list_snapshots_mock(mocker):
     assert len(snaps) == 1
     assert snaps[0].name == "my-snapshot"
     assert snaps[0].disk_size_gb == 200
+
+
+def test_list_instances_with_metrics(mocker):
+    # Mock clients
+    mock_compute = mocker.patch("skywalker.walkers.compute.compute_v1.InstancesClient")
+    mock_monitor = mocker.patch("skywalker.walkers.compute.monitoring_v3.MetricServiceClient")
+
+    # Mock Instance
+    mock_inst = mocker.Mock()
+    mock_inst.name = "perf-instance"
+    mock_inst.id = 55555
+    mock_inst.status = "RUNNING"
+    mock_inst.machine_type = "n1-standard-1"
+    mock_inst.creation_timestamp = "2023-01-01T12:00:00Z"
+    mock_inst.labels = {}
+    mock_inst.guest_accelerators = []
+    mock_inst.disks = []
+    mock_inst.network_interfaces = []
+    
+    mock_compute.return_value.list.return_value = [mock_inst]
+
+    # Mock Metrics response
+    # 1. CPU
+    mock_ts_cpu = mocker.Mock()
+    mock_ts_cpu.resource.labels = {"instance_id": "55555"}
+    mock_point_cpu = mocker.Mock()
+    mock_point_cpu.value.double_value = 0.42  # 42%
+    mock_ts_cpu.points = [mock_point_cpu]
+    
+    # 2. Memory
+    mock_ts_mem = mocker.Mock()
+    mock_ts_mem.resource.labels = {"instance_id": "55555"}
+    mock_point_mem = mocker.Mock()
+    mock_point_mem.value.double_value = 15.5  # 15.5%
+    mock_ts_mem.points = [mock_point_mem]
+
+    # Configure Monitor Mock side_effect to return CPU then Mem
+    mock_monitor.return_value.list_time_series.side_effect = [
+        [mock_ts_cpu],
+        [mock_ts_mem]
+    ]
+
+    # Call with metrics
+    instances = list_instances("test-project", "us-central1-a", include_metrics=True)
+    
+    assert len(instances) == 1
+    assert instances[0].cpu_utilization == pytest.approx(42.0)
+    assert instances[0].memory_usage == pytest.approx(15.5)
+    
+    assert mock_monitor.return_value.list_time_series.call_count == 2
