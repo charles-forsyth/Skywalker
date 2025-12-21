@@ -18,9 +18,17 @@ def test_list_filestore_instances(mocker):
     # Mock Instance
     mock_inst = mocker.Mock()
     mock_inst.name = "projects/p/locations/us-central1/instances/my-nfs"
-    mock_inst.tier = "TIER.BASIC_HDD"
-    mock_inst.state = "STATE.READY"
+    
+    # Mock Enums
+    mock_inst.tier = mocker.Mock()
+    mock_inst.tier.name = "BASIC_HDD"
+    
+    mock_inst.state = mocker.Mock()
+    mock_inst.state.name = "READY"
+    
     mock_inst.create_time = "2023-01-01"
+
+    # Mock Networks
 
     # Mock Networks
     mock_net = mocker.Mock()
