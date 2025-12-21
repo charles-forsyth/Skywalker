@@ -14,7 +14,10 @@ response = client.search_all_resources(
 count = 0
 for resource in response:
     count += 1
-    print(f"[{count}] Name: {resource.display_name} | ID: {resource.additional_attributes.get('id')} | Project: {resource.project}")
-    if count >= 10: break
+    print(
+        f"[{count}] Name: {resource.display_name} | ID: {resource.additional_attributes.get('id')} | Project: {resource.project}"
+    )
+    if count >= 10:
+        break
 
 print(f"Total found in first page: {count}")

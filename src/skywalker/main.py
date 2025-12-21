@@ -374,8 +374,7 @@ def print_project_detailed(
         for svc in run_services:
             console.print(
                 f" - [cyan]{svc.name}[/cyan] ({svc.url})\n"
-                f"   Image: {svc.image}
-"
+                f"   Image: {svc.image}\n"
                 f"   Updated: {svc.create_time.strftime('%Y-%m-%d')} "
                 f"| By: {svc.last_modifier}"
             )
@@ -595,8 +594,7 @@ Examples:
     # Must validate required args manually since group is now optional for --version
     if not any([args.project_id, args.all_projects, args.monitor]):
         parser.error(
-            "one of the arguments --project-id --all-projects "
-            "--monitor is required"
+            "one of the arguments --project-id --all-projects --monitor is required"
         )
 
     # Use stderr for logs/progress if stdout is piped for JSON
