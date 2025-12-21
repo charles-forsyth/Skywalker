@@ -18,11 +18,23 @@ from rich.progress import (
 
 from .core import STANDARD_REGIONS, ZONE_SUFFIXES
 from .schemas.compute import GCPComputeInstance, GCPComputeReport
+from .schemas.filestore import GCPFilestoreInstance
 from .schemas.gke import GCPCluster
 from .schemas.run import GCPCloudRunService
 from .schemas.vertex import GCPVertexReport
 from .users import UserResolver
-from .walkers import compute, gke, iam, network, org, run, sql, storage, vertex
+from .walkers import (
+    compute,
+    filestore,
+    gke,
+    iam,
+    network,
+    org,
+    run,
+    sql,
+    storage,
+    vertex,
+)
 
 
 def scan_compute_zone(
@@ -34,6 +46,18 @@ def scan_compute_zone(
             compute.list_instances(
                 project_id=project_id, zone=zone, include_metrics=include_metrics
             ),
+        )
+    except Exception:
+        return []
+
+
+def scan_filestore_location(
+    project_id: str, location: str
+) -> list[GCPFilestoreInstance]:
+    try:
+        return cast(
+            list[GCPFilestoreInstance],
+            filestore.list_instances(project_id=project_id, location=location),
         )
     except Exception:
         return []
@@ -122,6 +146,18 @@ def run_audit_for_project(
                 run_results.extend(future.result())
         report_data["services"]["run"] = run_results
 
+    # --- Filestore (Regional) ---
+    if "filestore" in services:
+        filestore_results = []
+        with ThreadPoolExecutor(max_workers=len(regions)) as fs_executor:
+            fs_futures = [
+                fs_executor.submit(scan_filestore_location, project_id, r)
+                for r in regions
+            ]
+            for fs_future in as_completed(fs_futures):
+                filestore_results.extend(fs_future.result())
+        report_data["services"]["filestore"] = filestore_results
+
     # --- GKE (Regional) ---
     if "gke" in services:
         gke_results = []
@@ -205,6 +241,10 @@ def print_project_summary(data: dict[str, Any], console: Console) -> None:
         )
     if "run" in services:
         console.print(f" - Cloud Run: [bold]{len(services['run'])}[/bold] services")
+    if "filestore" in services:
+        console.print(
+            f" - Filestore: [bold]{len(services['filestore'])}[/bold] instances"
+        )
     if "gke" in services:
         console.print(f" - GKE: [bold]{len(services['gke'])}[/bold] clusters")
     if "sql" in services:
@@ -327,6 +367,19 @@ def print_project_detailed(
                 f"   Image: {svc.image}\n"
                 f"   Updated: {svc.create_time.strftime('%Y-%m-%d')} "
                 f"| By: {svc.last_modifier}"
+            )
+
+    # 2.5 Filestore
+    if "filestore" in services:
+        console.print("\n[bold]-- Filestore (NFS) --[/bold]")
+        fs_instances = services["filestore"]
+        console.print(f"Found [bold]{len(fs_instances)}[/bold] instances:")
+        for fs in fs_instances:
+            ip_str = ", ".join(fs.ip_addresses)
+            created = fs.create_time.strftime("%Y-%m-%d") if fs.create_time else "N/A"
+            console.print(
+                f" - [cyan]{fs.name}[/cyan] ({fs.tier}) [{fs.state}]\n"
+                f"   Size: {fs.capacity_gb}GB | IP: {ip_str} | Created: {created}"
             )
 
     # 3. GKE
@@ -481,6 +534,7 @@ Examples:
             "gke",
             "vertex",
             "sql",
+            "filestore",
             "iam",
             "run",
             "network",
@@ -538,6 +592,7 @@ Examples:
             "gke",
             "vertex",
             "sql",
+            "filestore",
             "iam",
             "run",
             "network",

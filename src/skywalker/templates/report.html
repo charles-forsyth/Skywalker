@@ -43,6 +43,7 @@
                 <th>Project ID</th>
                 <th>VMs</th>
                 <th>Storage</th>
+                <th>Filestore</th>
                 <th>SQL</th>
                 <th>Security Flags</th>
             </tr>
@@ -53,6 +54,7 @@
                 <td><strong>{{ data.project_id }}</strong></td>
                 <td>{{ data.services.compute.instances | length if data.services.compute and data.services.compute.instances else 0 }}</td>
                 <td>{{ data.services.storage | length if data.services.storage else 0 }}</td>
+                <td>{{ data.services.filestore | length if data.services.filestore else 0 }}</td>
                 <td>{{ data.services.sql | length if data.services.sql else 0 }}</td>
                 <td>
                     {% set open_fw = 0 %}
@@ -253,6 +255,37 @@
             <tr>
                 <td>{{ svc.name }}</td>
                 <td>{{ svc.create_time | format_date }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- Filestore -->
+    {% if data.services.filestore %}
+    <h3>Filestore (NFS)</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Tier</th>
+                <th>Capacity</th>
+                <th>IP Address</th>
+                <th>State</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fs in data.services.filestore %}
+            <tr>
+                <td>{{ fs.name }}</td>
+                <td>{{ fs.tier }}</td>
+                <td>{{ fs.capacity_gb }} GB</td>
+                <td>{{ fs.ip_addresses | join(", ") }}</td>
+                <td>
+                    <span class="badge {% if fs.state == 'READY' %}bg-green{% else %}bg-gray{% endif %}">
+                        {{ fs.state }}
+                    </span>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

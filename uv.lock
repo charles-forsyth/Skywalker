@@ -528,6 +528,22 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-common"
+version = "1.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/63/8982f9b22af28b56ef0f4a949aa1383256d0075c92ddd765938143c1c87c/google_cloud_common-1.7.0.tar.gz", hash = "sha256:10143a7ae3e81b3f55cb0139809a89228d86d2ff735a99689ab0157a07bd2869", size = 13938, upload-time = "2025-10-28T17:26:31.738Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/c4/9a152c07719e0788dbce09502eface24a26f020460834a96872c6ac7842c/google_cloud_common-1.7.0-py3-none-any.whl", hash = "sha256:7811478da74c79f81f716ce143cbf4952c591d2870bf6159fc1f0d8165358b3c", size = 12786, upload-time = "2025-10-28T17:26:21.166Z" },
+]
+
+[[package]]
 name = "google-cloud-compute"
 version = "1.40.0"
 source = { registry = "https://pypi.org/simple" }
@@ -570,6 +586,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a6/03/ef0bc99d0e0faf4fdbe67ac445e18cdaa74824fd93cd069e7bb6548cb52d/google_cloud_core-2.5.0.tar.gz", hash = "sha256:7c1b7ef5c92311717bd05301aa1a91ffbc565673d3b0b4163a52d8413a186963", size = 36027, upload-time = "2025-10-29T23:17:39.513Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/89/20/bfa472e327c8edee00f04beecc80baeddd2ab33ee0e86fd7654da49d45e9/google_cloud_core-2.5.0-py3-none-any.whl", hash = "sha256:67d977b41ae6c7211ee830c7912e41003ea8194bff15ae7d72fd6f51e57acabc", size = 29469, upload-time = "2025-10-29T23:17:38.548Z" },
+]
+
+[[package]]
+name = "google-cloud-filestore"
+version = "1.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "google-cloud-common" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/f8/835dbacbcc3489826a24535db565536e5029ecc8fa2bb44cb7459c5588dd/google_cloud_filestore-1.14.0.tar.gz", hash = "sha256:90a14f300560b3754b8111fb2bb2838ec945f10f4200848580866952e9f841a9", size = 115050, upload-time = "2025-10-17T02:34:48.159Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/31/dbfb2adc17689f61569190284cf5d91b3e1db2ad4c36ca689f1d37430bda/google_cloud_filestore-1.14.0-py3-none-any.whl", hash = "sha256:2f1522b05a8cb8c032907a54c70fbfe2511ba096e1e211b2db49a1d36ec26ad4", size = 86578, upload-time = "2025-10-17T02:32:58.389Z" },
 ]
 
 [[package]]
@@ -1970,13 +2003,14 @@ wheels = [
 
 [[package]]
 name = "skywalker"
-version = "0.21.0"
+version = "0.22.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },
     { name = "google-cloud-aiplatform" },
     { name = "google-cloud-compute" },
     { name = "google-cloud-container" },
+    { name = "google-cloud-filestore" },
     { name = "google-cloud-functions" },
     { name = "google-cloud-iam" },
     { name = "google-cloud-monitoring" },
@@ -2011,6 +2045,7 @@ requires-dist = [
     { name = "google-cloud-aiplatform", specifier = ">=1.0.0" },
     { name = "google-cloud-compute", specifier = ">=1.0.0" },
     { name = "google-cloud-container", specifier = ">=2.0.0" },
+    { name = "google-cloud-filestore", specifier = ">=1.0.0" },
     { name = "google-cloud-functions", specifier = ">=1.0.0" },
     { name = "google-cloud-iam", specifier = ">=2.0.0" },
     { name = "google-cloud-monitoring", specifier = ">=2.0.0" },
