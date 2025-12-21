@@ -27,6 +27,7 @@ from .schemas.run import GCPCloudRunService
 from .schemas.vertex import GCPVertexReport
 from .users import UserResolver
 from .walkers import (
+    asset,
     compute,
     filestore,
     gke,
@@ -527,6 +528,10 @@ Examples:
         "--scoping-project",
         help="Monitoring Scoping Project ID for Fleet Performance Mode",
     )
+    parser.add_argument(
+        "--org-id",
+        help="Organization ID for Asset Inventory search (e.g. 123456789)",
+    )
 
     parser.add_argument(
         "--regions",
@@ -607,8 +612,30 @@ Examples:
         )
 
         try:
+            # 1. Fetch Metrics
             metrics_data = monitoring.fetch_fleet_metrics(args.scoping_project)
-            df = pd.DataFrame(metrics_data)
+            
+            # 2. Fetch Asset Inventory (for Names & Types)
+            asset_scope = args.scoping_project
+            if args.org_id:
+                asset_scope = f"organizations/{args.org_id}"
+            
+            log_console.print(f"Fetching asset inventory from scope: {asset_scope}...")
+            assets = asset.search_all_instances(asset_scope)
+            
+            # 3. Enrich Data
+            enriched_data = []
+            for m in metrics_data:
+                iid = m.get("instance_id")
+                if iid and iid in assets:
+                    m["instance_name"] = assets[iid]["name"]
+                    m["machine_type"] = assets[iid]["machine_type"]
+                else:
+                    m["instance_name"] = "unknown"
+                    m["machine_type"] = "unknown"
+                enriched_data.append(m)
+
+            df = pd.DataFrame(enriched_data)
 
             if df.empty:
                 log_console.print("[yellow]No metrics found in scope.[/yellow]")
@@ -621,7 +648,8 @@ Examples:
             if not args.json:
                 table = Table(title="Fleet Top Consumers")
                 table.add_column("Project", style="cyan")
-                table.add_column("Instance ID", style="green")
+                table.add_column("Name", style="bold green")
+                table.add_column("Type", style="dim")
                 table.add_column("CPU %", justify="right")
                 table.add_column("Mem %", justify="right")
                 table.add_column("GPU Util %", justify="right")
@@ -635,7 +663,8 @@ Examples:
 
                     table.add_row(
                         str(row["project_id"]),
-                        str(row["instance_id"]),
+                        str(row["instance_name"]),
+                        str(row["machine_type"]),
                         f"[{cpu_style}]{row['cpu_percent']:.1f}%[/{cpu_style}]",
                         f"{row['memory_percent']:.1f}%",
                         f"[{gpu_style}]{row['gpu_utilization']:.1f}%[/{gpu_style}]",

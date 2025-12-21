@@ -61,7 +61,8 @@
             <thead>
                 <tr>
                     <th>Project ID</th>
-                    <th>Instance ID</th>
+                    <th>Instance Name</th>
+                    <th>Type</th>
                     <th>Zone</th>
                     <th>CPU Utilization</th>
                     <th>Memory Usage</th>
@@ -72,7 +73,8 @@
                 {% for row in data | sort(attribute='cpu_percent', reverse=True) %}
                 <tr>
                     <td><strong>{{ row.project_id }}</strong></td>
-                    <td><code>{{ row.instance_id }}</code></td>
+                    <td><code>{{ row.instance_name }}</code></td>
+                    <td>{{ row.machine_type }}</td>
                     <td>{{ row.zone }}</td>
                     <td>
                         <div class="progress-bar">
