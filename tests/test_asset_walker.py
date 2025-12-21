@@ -1,4 +1,5 @@
 import pytest
+
 from skywalker.core import memory
 from skywalker.walkers.asset import search_all_instances
 
