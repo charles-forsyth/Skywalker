@@ -14,7 +14,7 @@ def search_all_instances(scope: str) -> dict[str, dict[str, Any]]:
     Returns a dict mapping instance_id -> {name, machine_type, ...}
     """
     client = asset_v1.AssetServiceClient()
-    
+
     # Ensure scope is formatted correctly
     if (
         not scope.startswith("projects/")
@@ -25,7 +25,7 @@ def search_all_instances(scope: str) -> dict[str, dict[str, Any]]:
         scope = f"projects/{scope}"
 
     results = {}
-    
+
     try:
         # Search for GCE Instances
         response = client.search_all_resources(
@@ -42,7 +42,7 @@ def search_all_instances(scope: str) -> dict[str, dict[str, Any]]:
             # resource.additional_attributes is a Struct
             attrs = resource.additional_attributes
             instance_id = attrs.get("id")
-            
+
             if instance_id:
                 results[instance_id] = {
                     "name": resource.display_name,

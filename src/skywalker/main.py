@@ -614,15 +614,15 @@ Examples:
         try:
             # 1. Fetch Metrics
             metrics_data = monitoring.fetch_fleet_metrics(args.scoping_project)
-            
+
             # 2. Fetch Asset Inventory (for Names & Types)
             asset_scope = args.scoping_project
             if args.org_id:
                 asset_scope = f"organizations/{args.org_id}"
-            
+
             log_console.print(f"Fetching asset inventory from scope: {asset_scope}...")
             assets = asset.search_all_instances(asset_scope)
-            
+
             # 3. Enrich Data
             enriched_data = []
             for m in metrics_data:
