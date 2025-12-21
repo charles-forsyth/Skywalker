@@ -639,7 +639,8 @@ Examples:
                     assets = asset.search_all_instances(f"organizations/{args.org_id}")
                 except Exception:
                     log_console.print(
-                        "[yellow]Org-level search failed. Falling back to project iteration.[/yellow]"
+                        "[yellow]Org-level search failed. "
+                        "Falling back to project iteration.[/yellow]"
                     )
                     # Fallback logic below...
 
