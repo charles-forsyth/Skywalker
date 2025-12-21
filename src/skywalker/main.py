@@ -611,33 +611,40 @@ Examples:
             f"via scope: {args.scoping_project}"
         )
 
-                try:
-                    # 1. Fetch Metrics
-                    metrics_data = monitoring.fetch_fleet_metrics(args.scoping_project)
-                    
-                    # 2. Identify Projects to Scan
-                    # We can't search the Organization (403), so we search each Project found in metrics.
-                    projects_to_scan = set(m.get("project_id") for m in metrics_data if m.get("project_id"))
-                    
-                    log_console.print(f"Fetching inventory for {len(projects_to_scan)} active projects...")
-                    
-                    assets = {}
-                    with ThreadPoolExecutor(max_workers=20) as executor:
-                        # Submit asset search for each project
-                        futures = {
-                            executor.submit(asset.search_all_instances, f"projects/{pid}"): pid 
-                            for pid in projects_to_scan
-                        }
-                        
-                        for future in as_completed(futures):
-                            try:
-                                project_assets = future.result()
-                                assets.update(project_assets)
-                            except Exception:
-                                pass # Ignore failures for individual projects
-        
-                    # 3. Enrich Data
-                    enriched_data = []            for m in metrics_data:
+        try:
+            # 1. Fetch Metrics
+            metrics_data = monitoring.fetch_fleet_metrics(args.scoping_project)
+
+            # 2. Identify Projects to Scan
+            # We can't search the Organization (403), so we search each Project found in metrics.
+            projects_to_scan = set(
+                m.get("project_id") for m in metrics_data if m.get("project_id")
+            )
+
+            log_console.print(
+                f"Fetching inventory for {len(projects_to_scan)} active projects..."
+            )
+
+            assets = {}
+            with ThreadPoolExecutor(max_workers=20) as executor:
+                # Submit asset search for each project
+                futures = {
+                    executor.submit(
+                        asset.search_all_instances, f"projects/{pid}"
+                    ): pid
+                    for pid in projects_to_scan
+                }
+
+                for future in as_completed(futures):
+                    try:
+                        project_assets = future.result()
+                        assets.update(project_assets)
+                    except Exception:
+                        pass  # Ignore failures for individual projects
+
+            # 3. Enrich Data
+            enriched_data = []
+            for m in metrics_data:
                 iid = str(m.get("instance_id", ""))
                 if iid and iid in assets:
                     m["instance_name"] = assets[iid]["name"]
