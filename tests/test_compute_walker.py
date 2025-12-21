@@ -136,7 +136,9 @@ def test_list_snapshots_mock(mocker):
 def test_list_instances_with_metrics(mocker):
     # Mock clients
     mock_compute = mocker.patch("skywalker.walkers.compute.compute_v1.InstancesClient")
-    mock_monitor = mocker.patch("skywalker.walkers.compute.monitoring_v3.MetricServiceClient")
+    mock_monitor = mocker.patch(
+        "skywalker.walkers.compute.monitoring_v3.MetricServiceClient"
+    )
 
     # Mock Instance
     mock_inst = mocker.Mock()
@@ -149,7 +151,7 @@ def test_list_instances_with_metrics(mocker):
     mock_inst.guest_accelerators = []
     mock_inst.disks = []
     mock_inst.network_interfaces = []
-    
+
     mock_compute.return_value.list.return_value = [mock_inst]
 
     # Mock Metrics response
@@ -159,7 +161,7 @@ def test_list_instances_with_metrics(mocker):
     mock_point_cpu = mocker.Mock()
     mock_point_cpu.value.double_value = 0.42  # 42%
     mock_ts_cpu.points = [mock_point_cpu]
-    
+
     # 2. Memory
     mock_ts_mem = mocker.Mock()
     mock_ts_mem.resource.labels = {"instance_id": "55555"}
@@ -167,17 +169,54 @@ def test_list_instances_with_metrics(mocker):
     mock_point_mem.value.double_value = 15.5  # 15.5%
     mock_ts_mem.points = [mock_point_mem]
 
-    # Configure Monitor Mock side_effect to return CPU then Mem
+    # Configure Monitor Mock side_effect to return CPU then Mem, then empty for GPUs
     mock_monitor.return_value.list_time_series.side_effect = [
         [mock_ts_cpu],
-        [mock_ts_mem]
+        [mock_ts_mem],
+        [],  # GPU Util
+        [],  # GPU Mem Util
     ]
 
     # Call with metrics
     instances = list_instances("test-project", "us-central1-a", include_metrics=True)
-    
+
     assert len(instances) == 1
     assert instances[0].cpu_utilization == pytest.approx(42.0)
     assert instances[0].memory_usage == pytest.approx(15.5)
-    
-    assert mock_monitor.return_value.list_time_series.call_count == 2
+
+    assert mock_monitor.return_value.list_time_series.call_count == 4
+
+
+def test_list_instances_gpu_metrics(mocker):
+    mock_compute = mocker.patch("skywalker.walkers.compute.compute_v1.InstancesClient")
+    mock_monitor = mocker.patch(
+        "skywalker.walkers.compute.monitoring_v3.MetricServiceClient"
+    )
+
+    mock_inst = mocker.Mock()
+    mock_inst.name = "gpu-node"
+    mock_inst.id = 999
+    mock_acc = mocker.Mock(accelerator_type="nvidia-tesla-t4", accelerator_count=1)
+    mock_inst.guest_accelerators = [mock_acc]
+    # ... other required fields ...
+    mock_inst.status = "RUNNING"
+    mock_inst.machine_type = "n1-standard-1"
+    mock_inst.creation_timestamp = "2023-01-01"
+    mock_inst.labels = {}
+    mock_inst.disks = []
+    mock_inst.network_interfaces = []
+
+    mock_compute.return_value.list.return_value = [mock_inst]
+
+    # Mock GPU Util Response
+    mock_ts = mocker.Mock()
+    mock_ts.resource.labels = {"instance_id": "999"}
+    mock_ts.points = [mocker.Mock(value=mocker.Mock(double_value=0.75))]  # 75%
+
+    # Side effects: CPU (empty), Mem (empty), GPU Util (hit), GPU Mem (empty)
+    mock_monitor.return_value.list_time_series.side_effect = [[], [], [mock_ts], []]
+
+    instances = list_instances("test-proj", "us-zone", include_metrics=True)
+    assert len(instances) == 1
+    assert instances[0].gpu_utilization == 0.75
+    assert instances[0].gpu_memory_usage is None

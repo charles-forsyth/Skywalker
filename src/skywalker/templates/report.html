@@ -111,7 +111,14 @@
                     {% if inst.memory_usage is not None %}
                         <div style="color: #2980b9;">Mem: {{ "%.1f"|format(inst.memory_usage) }}%</div>
                     {% endif %}
-                    {% if inst.cpu_utilization is none and inst.memory_usage is none %}
+                    {% if inst.gpus %}
+                        {% if inst.gpu_utilization is not None %}
+                             <div style="font-weight:bold; color: #8e44ad;">GPU: {{ "%.1f"|format(inst.gpu_utilization) }}%</div>
+                        {% else %}
+                             <div style="color: #e74c3c; font-weight:bold; font-size:10px;">[No Ops Agent]</div>
+                        {% endif %}
+                    {% endif %}
+                    {% if inst.cpu_utilization is none and inst.memory_usage is none and not inst.gpus %}
                         -
                     {% endif %}
                 </td>

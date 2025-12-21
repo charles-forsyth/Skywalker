@@ -30,6 +30,12 @@ class GCPComputeInstance(BaseModel):
     external_ip: str | None = None
     cpu_utilization: float | None = Field(default=None, description="Recent CPU %")
     memory_usage: float | None = Field(default=None, description="Recent Mem %")
+    gpu_utilization: float | None = Field(
+        default=None, description="Recent GPU Util % (requires Ops Agent)"
+    )
+    gpu_memory_usage: float | None = Field(
+        default=None, description="Recent GPU Mem % (requires Ops Agent)"
+    )
 
 
 class GCPImage(BaseModel):

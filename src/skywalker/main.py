@@ -221,7 +221,9 @@ def print_project_summary(data: dict[str, Any], console: Console) -> None:
         )
 
 
-def print_project_detailed(data: dict[str, Any], console: Console) -> None:
+def print_project_detailed(
+    data: dict[str, Any], console: Console, include_metrics: bool = False
+) -> None:
     """Prints full resource details for a single project audit."""
     project_id = data["project_id"]
     services = data["services"]
@@ -253,6 +255,17 @@ def print_project_detailed(data: dict[str, Any], console: Console) -> None:
                 )
             if inst.memory_usage is not None:
                 perf_text += f" | [bold blue]Mem: {inst.memory_usage:.1f}%[/bold blue]"
+
+            # GPU Metrics Logic
+            if inst.gpus:
+                if inst.gpu_utilization is not None:
+                    perf_text += (
+                        f" | [bold magenta]GPU: {inst.gpu_utilization:.1f}%"
+                        "[/bold magenta]"
+                    )
+                elif include_metrics:
+                    # We asked for metrics, have a GPU, but got None -> No Agent
+                    perf_text += " | [bold red][No Ops Agent][/bold red]"
 
             created_date = inst.creation_timestamp.strftime("%Y-%m-%d")
             created_text = f" | Created: {created_date}"
@@ -550,7 +563,7 @@ Examples:
             )
             all_reports.append(result)
             if not args.json:
-                print_project_detailed(result, out_console)
+                print_project_detailed(result, out_console, args.metrics)
         except Exception as e:
             log_console.print(
                 f"[bold red]Failed to audit project {pid}:[/bold red] {e}"

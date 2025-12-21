@@ -83,6 +83,57 @@ def _fetch_performance_metrics(
     except Exception:
         pass
 
+    # 3. GPU Utilization (Ops Agent)
+    try:
+        gpu_util_filter = (
+            'metric.type = "agent.googleapis.com/gpu/utilization" '
+            f'AND resource.labels.zone = "{zone}"'
+        )
+        gpu_util_results = client.list_time_series(
+            request={
+                "name": project_name,
+                "filter": gpu_util_filter,
+                "interval": interval,
+                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+            }
+        )
+        for ts in gpu_util_results:
+            instance_id = ts.resource.labels.get("instance_id")
+            if instance_id and ts.points:
+                # GPU metrics can be per-GPU (device_id label)
+                # We will take the MAX utilization of any GPU on the instance
+                val = ts.points[0].value.double_value
+                inst_data = metrics_map.setdefault(instance_id, {})
+                current_max = inst_data.get("gpu_util", 0.0)
+                inst_data["gpu_util"] = max(current_max, val)
+    except Exception:
+        pass
+
+    # 4. GPU Memory Usage (Ops Agent)
+    # The metric agent.googleapis.com/gpu/memory/utilization exists!
+    try:
+        gpu_mem_util_filter = (
+            'metric.type = "agent.googleapis.com/gpu/memory/utilization" '
+            f'AND resource.labels.zone = "{zone}"'
+        )
+        gpu_mem_results = client.list_time_series(
+            request={
+                "name": project_name,
+                "filter": gpu_mem_util_filter,
+                "interval": interval,
+                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+            }
+        )
+        for ts in gpu_mem_results:
+            instance_id = ts.resource.labels.get("instance_id")
+            if instance_id and ts.points:
+                val = ts.points[0].value.double_value * 100  # It returns 0.0-1.0
+                inst_data = metrics_map.setdefault(instance_id, {})
+                current_max = inst_data.get("gpu_mem", 0.0)
+                inst_data["gpu_mem"] = max(current_max, val)
+    except Exception:
+        pass
+
     return metrics_map
 
 
@@ -162,6 +213,8 @@ def list_instances(
                 external_ip=external_ip,
                 cpu_utilization=inst_metrics.get("cpu"),
                 memory_usage=inst_metrics.get("mem"),
+                gpu_utilization=inst_metrics.get("gpu_util"),
+                gpu_memory_usage=inst_metrics.get("gpu_mem"),
             )
         )
 
