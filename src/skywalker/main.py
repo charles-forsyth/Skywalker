@@ -616,10 +616,11 @@ Examples:
             metrics_data = monitoring.fetch_fleet_metrics(args.scoping_project)
 
             # 2. Identify Projects to Scan
-            # We can't search the Organization (403), so we search each Project found in metrics.
-            projects_to_scan = set(
+            # We can't search the Organization (403), so we search each Project
+            # found in metrics.
+            projects_to_scan = {
                 m.get("project_id") for m in metrics_data if m.get("project_id")
-            )
+            }
 
             log_console.print(
                 f"Fetching inventory for {len(projects_to_scan)} active projects..."
