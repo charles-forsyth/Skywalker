@@ -195,7 +195,7 @@ def _list_instances_inventory(project_id: str, zone: str) -> list[GCPComputeInst
                 status=instance.status,
                 machine_type=machine_type_clean,
                 zone=zone,
-                creation_timestamp=instance.creation_timestamp,  # type: ignore[arg-type]
+                creation_timestamp=instance.creation_timestamp,
                 labels=dict(instance.labels) if instance.labels else {},
                 disks=disks,
                 gpus=gpus,
@@ -247,7 +247,7 @@ def list_images(project_id: str) -> list[GCPImage]:
             GCPImage(
                 name=img.name,
                 id=str(img.id),
-                creation_timestamp=img.creation_timestamp,  # type: ignore[arg-type]
+                creation_timestamp=img.creation_timestamp,
                 disk_size_gb=img.disk_size_gb,
                 status=img.status,
                 archive_size_bytes=img.archive_size_bytes,
@@ -270,7 +270,7 @@ def list_machine_images(project_id: str) -> list[GCPMachineImage]:
             GCPMachineImage(
                 name=img.name,
                 id=str(img.id),
-                creation_timestamp=img.creation_timestamp,  # type: ignore[arg-type]
+                creation_timestamp=img.creation_timestamp,
                 status=img.status,
                 total_storage_bytes=img.total_storage_bytes,
             )
@@ -292,7 +292,7 @@ def list_snapshots(project_id: str) -> list[GCPSnapshot]:
             GCPSnapshot(
                 name=snap.name,
                 id=str(snap.id),
-                creation_timestamp=snap.creation_timestamp,  # type: ignore[arg-type]
+                creation_timestamp=snap.creation_timestamp,
                 disk_size_gb=snap.disk_size_gb,
                 status=snap.status,
                 storage_bytes=snap.storage_bytes,
