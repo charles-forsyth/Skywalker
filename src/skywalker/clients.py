@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 from functools import lru_cache
 from typing import Any
 
-# Import GCP clients
 from google.cloud import (
     asset_v1,
     compute_v1,
@@ -12,8 +13,8 @@ from google.cloud import (
     notebooks_v1,
     resourcemanager_v3,
     run_v2,
-    storage,  # type: ignore[attr-defined]
 )
+from google.cloud import storage  # type: ignore[attr-defined]
 
 # Shared Client Registry (Lazy-loaded and cached)
 
