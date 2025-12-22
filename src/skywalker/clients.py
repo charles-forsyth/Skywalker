@@ -17,94 +17,75 @@ from google.cloud import (
 
 # Shared Client Registry (Lazy-loaded and cached)
 
-
 @lru_cache(maxsize=1)
-def get_compute_instances_client() -> compute_v1.InstancesClient:
+def get_compute_instances_client() -> Any:
     return compute_v1.InstancesClient()
 
-
 @lru_cache(maxsize=1)
-def get_compute_images_client() -> compute_v1.ImagesClient:
+def get_compute_images_client() -> Any:
     return compute_v1.ImagesClient()
 
-
 @lru_cache(maxsize=1)
-def get_compute_machine_images_client() -> compute_v1.MachineImagesClient:
+def get_compute_machine_images_client() -> Any:
     return compute_v1.MachineImagesClient()
 
-
 @lru_cache(maxsize=1)
-def get_compute_snapshots_client() -> compute_v1.SnapshotsClient:
+def get_compute_snapshots_client() -> Any:
     return compute_v1.SnapshotsClient()
 
-
 @lru_cache(maxsize=1)
-def get_firewalls_client() -> compute_v1.FirewallsClient:
+def get_firewalls_client() -> Any:
     return compute_v1.FirewallsClient()
 
-
 @lru_cache(maxsize=1)
-def get_networks_client() -> compute_v1.NetworksClient:
+def get_networks_client() -> Any:
     return compute_v1.NetworksClient()
 
-
 @lru_cache(maxsize=1)
-def get_subnetworks_client() -> compute_v1.SubnetworksClient:
+def get_subnetworks_client() -> Any:
     return compute_v1.SubnetworksClient()
 
-
 @lru_cache(maxsize=1)
-def get_addresses_client() -> compute_v1.AddressesClient:
+def get_addresses_client() -> Any:
     return compute_v1.AddressesClient()
 
-
 @lru_cache(maxsize=1)
-def get_monitoring_client() -> monitoring_v3.MetricServiceClient:
+def get_monitoring_client() -> Any:
     return monitoring_v3.MetricServiceClient()
 
-
 @lru_cache(maxsize=1)
-def get_asset_client() -> asset_v1.AssetServiceClient:
+def get_asset_client() -> Any:
     return asset_v1.AssetServiceClient()
 
-
 @lru_cache(maxsize=1)
-def get_projects_client() -> resourcemanager_v3.ProjectsClient:
+def get_projects_client() -> Any:
     return resourcemanager_v3.ProjectsClient()
 
-
 @lru_cache(maxsize=1)
-def get_gke_client() -> container_v1.ClusterManagerClient:
+def get_gke_client() -> Any:
     return container_v1.ClusterManagerClient()
-
 
 @lru_cache(maxsize=1)
 def get_sql_client() -> Any:
     from googleapiclient import discovery
-
     return discovery.build("sqladmin", "v1beta4", cache_discovery=False)
 
-
 @lru_cache(maxsize=1)
-def get_filestore_client() -> filestore_v1.CloudFilestoreManagerClient:
+def get_filestore_client() -> Any:
     return filestore_v1.CloudFilestoreManagerClient()
 
-
 @lru_cache(maxsize=1)
-def get_run_client() -> run_v2.ServicesClient:
+def get_run_client() -> Any:
     return run_v2.ServicesClient()
 
-
 @lru_cache(maxsize=1)
-def get_iam_client() -> iam_admin_v1.IAMClient:
+def get_iam_client() -> Any:
     return iam_admin_v1.IAMClient()
 
-
 @lru_cache(maxsize=1)
-def get_notebook_client() -> notebooks_v1.NotebookServiceClient:
+def get_notebook_client() -> Any:
     return notebooks_v1.NotebookServiceClient()
 
-
 @lru_cache(maxsize=1)
-def get_storage_client() -> storage.Client:
+def get_storage_client() -> Any:
     return storage.Client()
