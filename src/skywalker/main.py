@@ -595,11 +595,6 @@ Examples:
         default=20,
         help="Number of rows to display in terminal table (default: 20)",
     )
-    parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="Disable and clear local cache for this run",
-    )
 
     args = parser.parse_args()
 
@@ -616,12 +611,6 @@ Examples:
     log_console.print(
         "[bold green]Skywalker[/bold green] Ursa Major Auditor initialized."
     )
-
-    if args.no_cache:
-        from .core import memory
-
-        log_console.print("[yellow]Clearing local cache...[/yellow]")
-        memory.clear(warn=False)
 
     # --- Fleet Performance Mode ---
     if args.monitor:

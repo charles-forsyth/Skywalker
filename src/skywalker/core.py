@@ -1,17 +1,4 @@
-import warnings
-from pathlib import Path
-
-import joblib
-from joblib.memory import JobLibCollisionWarning
 from tenacity import stop_after_attempt, wait_exponential
-
-# Suppress JobLib collision warnings caused by tenacity wrapping
-warnings.simplefilter("ignore", JobLibCollisionWarning)
-
-# Shared memory cache
-# Use an absolute path so the cache is shared regardless of CWD
-cache_dir = Path.home() / ".cache" / "skywalker"
-memory = joblib.Memory(location=str(cache_dir), verbose=0)
 
 # Shared retry configuration
 # usage: @retry(**RETRY_CONFIG)

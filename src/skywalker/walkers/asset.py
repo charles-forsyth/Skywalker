@@ -1,21 +1,20 @@
 from typing import Any
 
 from google.api_core import exceptions
-from google.cloud import asset_v1
 from tenacity import retry
 
-from ..core import RETRY_CONFIG, memory
+from ..clients import get_asset_client
+from ..core import RETRY_CONFIG
 from ..logger import logger
 
 
-@memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def search_all_instances(scope: str) -> dict[str, dict[str, Any]]:
     """
     Searches for all Compute Instances within the given scope (Project, Folder, or Org).
     Returns a dict mapping instance_id -> {name, machine_type, ...}
     """
-    client = asset_v1.AssetServiceClient()
+    client = get_asset_client()
 
     # Ensure scope is formatted correctly
     if (

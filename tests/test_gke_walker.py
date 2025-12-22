@@ -1,20 +1,12 @@
 import pytest
 
-from skywalker.core import memory
 from skywalker.walkers.gke import list_clusters
 
 
-@pytest.fixture(autouse=True)
-def clear_cache():
-    """Clear joblib caching for all tests in this module."""
-    memory.clear()
-
-
 def test_list_clusters_mock(mocker):
-    # Mock the Cluster Manager Client
-    mock_client = mocker.patch(
-        "skywalker.walkers.gke.container_v1.ClusterManagerClient"
-    )
+    # Mock the Client Getter
+    mock_get = mocker.patch("skywalker.walkers.gke.get_gke_client")
+    mock_client = mock_get.return_value
 
     # Create a mock cluster object
     mock_cluster = mocker.Mock()
@@ -37,7 +29,7 @@ def test_list_clusters_mock(mocker):
     mock_cluster.node_pools = [mock_np]
 
     # Configure the mock client
-    mock_client.return_value.list_clusters.return_value = mocker.Mock(
+    mock_client.list_clusters.return_value = mocker.Mock(
         clusters=[mock_cluster]
     )
 
@@ -51,4 +43,4 @@ def test_list_clusters_mock(mocker):
     assert len(c.node_pools) == 1
     assert c.node_pools[0].node_count == 3
 
-    mock_client.return_value.list_clusters.assert_called_once()
+    mock_client.list_clusters.assert_called_once()

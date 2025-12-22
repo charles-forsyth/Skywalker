@@ -6,18 +6,18 @@ from google.api_core import exceptions
 from google.cloud import monitoring_v3
 from tenacity import retry
 
-from ..core import RETRY_CONFIG, memory
+from ..clients import get_monitoring_client
+from ..core import RETRY_CONFIG
 from ..logger import logger
 
 
-@memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def fetch_fleet_metrics(scoping_project_id: str) -> list[dict[str, Any]]:
     """
     Fetches aggregated metrics for ALL projects monitored by the scoping project.
     Returns a flat list of dicts suitable for DataFrame creation.
     """
-    client = monitoring_v3.MetricServiceClient()
+    client = get_monitoring_client()
     name = f"projects/{scoping_project_id}"
 
     # 10 minute window

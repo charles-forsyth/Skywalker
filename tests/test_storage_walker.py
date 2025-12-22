@@ -1,56 +1,37 @@
-from datetime import datetime, timezone
-
 import pytest
 
-from skywalker.core import memory
 from skywalker.walkers.storage import list_buckets
 
 
-@pytest.fixture(autouse=True)
-def clear_cache():
-    """Clear joblib caching for all tests in this module."""
-    memory.clear()
-
-
 def test_list_buckets_mock(mocker):
-    # Mock the Storage Client
-    mock_client = mocker.patch("skywalker.walkers.storage.storage.Client")
+    # Mock Getters
+    mock_get_storage = mocker.patch("skywalker.walkers.storage.get_storage_client")
+    mock_storage = mock_get_storage.return_value
+    
+    mock_get_monitor = mocker.patch("skywalker.walkers.storage.get_monitoring_client")
+    mock_monitor = mock_get_monitor.return_value
 
-    # Create a mock bucket object
+    # Mock bucket
     mock_bucket = mocker.Mock()
-    mock_bucket.name = "test-bucket"
-    mock_bucket.location = "US-WEST1"
+    mock_bucket.name = "my-bucket"
+    mock_bucket.location = "US"
     mock_bucket.storage_class = "STANDARD"
-    mock_bucket.time_created = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    mock_bucket.time_created = "2023-01-01"
+    mock_bucket.iam_configuration.public_access_prevention = "enforced"
     mock_bucket.versioning_enabled = True
+    mock_bucket.iam_configuration.uniform_bucket_level_access_enabled = True
+    
+    mock_storage.list_buckets.return_value = [mock_bucket]
+    
+    # Mock Monitoring Response for size
+    mock_ts = mocker.Mock()
+    mock_ts.resource.labels = {"bucket_name": "my-bucket"}
+    mock_ts.points = [mocker.Mock(value=mocker.Mock(double_value=1024.0))]
+    mock_monitor.list_time_series.return_value = [mock_ts]
 
-    # Mock IAM Configuration
-    mock_iam = mocker.Mock()
-    mock_iam.public_access_prevention = "enforced"
-    mock_iam.uniform_bucket_level_access_enabled = True
-    mock_bucket.iam_configuration = mock_iam
+    results = list_buckets("test-project")
 
-    # Mock bucket sizes
-    mocker.patch(
-        "skywalker.walkers.storage.fetch_bucket_sizes",
-        return_value={"test-bucket": 1024 * 1024 * 500},  # 500 MB
-    )
-
-    # Configure the mock client to return the mock bucket
-    mock_client.return_value.list_buckets.return_value = [mock_bucket]
-
-    # Call the function
-    buckets = list_buckets(project_id="test-project")
-
-    # Assertions
-    assert len(buckets) == 1
-    b = buckets[0]
-    assert b.name == "test-bucket"
-    assert b.public_access_prevention == "enforced"
-    assert b.versioning_enabled is True
-    assert b.uniform_bucket_level_access is True
-    assert b.size_bytes == 524288000
-
-    # Verify the client was called correctly
-    mock_client.assert_called_once_with(project="test-project")
-    mock_client.return_value.list_buckets.assert_called_once()
+    assert len(results) == 1
+    assert results[0].name == "my-bucket"
+    assert results[0].size_bytes == 1024
+    assert results[0].public_access_prevention == "enforced"

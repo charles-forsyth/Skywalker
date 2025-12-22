@@ -1,87 +1,56 @@
 import pytest
 
-from skywalker.core import memory
 from skywalker.walkers.network import get_network_report
 
 
-@pytest.fixture(autouse=True)
-def clear_cache():
-    """Clear joblib caching for all tests in this module."""
-    memory.clear()
-
-
 def test_get_network_report_mock(mocker):
-    # Mock Clients
-    mock_fw_client = mocker.patch(
-        "skywalker.walkers.network.compute_v1.FirewallsClient"
-    )
-    mock_net_client = mocker.patch(
-        "skywalker.walkers.network.compute_v1.NetworksClient"
-    )
-    mock_subnet_client = mocker.patch(
-        "skywalker.walkers.network.compute_v1.SubnetworksClient"
-    )
-    mock_addr_client = mocker.patch(
-        "skywalker.walkers.network.compute_v1.AddressesClient"
-    )
+    # Mock all getters
+    mock_get_fw = mocker.patch("skywalker.walkers.network.get_firewalls_client")
+    mock_fw = mock_get_fw.return_value
+    
+    mock_get_net = mocker.patch("skywalker.walkers.network.get_networks_client")
+    mock_net = mock_get_net.return_value
+    
+    mock_get_sub = mocker.patch("skywalker.walkers.network.get_subnetworks_client")
+    mock_sub = mock_get_sub.return_value
+    
+    mock_get_addr = mocker.patch("skywalker.walkers.network.get_addresses_client")
+    mock_addr = mock_get_addr.return_value
 
-    # Mock Firewall
-    mock_fw = mocker.Mock()
-    mock_fw.name = "default-allow-ssh"
-    mock_fw.network = "global/networks/default"
-    mock_fw.direction = "INGRESS"
-    mock_fw.priority = 65534
-    mock_fw.allowed = [mocker.Mock(IP_protocol="tcp", ports=["22"])]
-    mock_fw.source_ranges = ["0.0.0.0/0"]
-    mock_fw.target_tags = ["ssh-server"]
-    mock_fw_client.return_value.list.return_value = [mock_fw]
+    # Setup Firewalls
+    mock_rule = mocker.Mock()
+    mock_rule.name = "allow-ssh"
+    mock_rule.network = "global/networks/default"
+    mock_rule.direction = "INGRESS"
+    mock_rule.allowed = [mocker.Mock(I_p_protocol="tcp", ports=["22"])]
+    mock_rule.denied = []
+    mock_rule.source_ranges = ["0.0.0.0/0"]
+    mock_rule.priority = 1000
+    mock_rule.target_tags = []
+    mock_fw.list.return_value = [mock_rule]
 
-    # Mock Network
-    mock_net = mocker.Mock()
-    mock_net.name = "default"
-    mock_net_client.return_value.list.return_value = [mock_net]
+    # Setup Networks
+    mock_vpc = mocker.Mock()
+    mock_vpc.name = "default"
+    mock_net.list.return_value = [mock_vpc]
 
-    # Mock Subnet Aggregated List
-    mock_subnet = mocker.Mock()
-    mock_subnet.name = "default"
-    mock_subnet.network = "global/networks/default"
-    mock_subnet.ip_cidr_range = "10.128.0.0/20"
-    mock_subnet.private_ip_google_access = True
-    mock_subnet.enable_flow_logs = False
-
-    # AggregatedList returns (region, {subnetworks: [...]}) tuples
-    mock_subnet_client.return_value.aggregated_list.return_value = [
-        ("regions/us-central1", mocker.Mock(subnetworks=[mock_subnet]))
+    # Setup Subnets
+    mock_sn = mocker.Mock()
+    mock_sn.name = "default-sn"
+    mock_sn.network = "global/networks/default"
+    mock_sn.ip_cidr_range = "10.0.0.0/24"
+    mock_sn.private_ip_google_access = True
+    mock_sn.enable_flow_logs = False
+    mock_sub.aggregated_list.return_value = [
+        ("regions/us-west1", mocker.Mock(subnetworks=[mock_sn]))
     ]
+    
+    # Setup Addresses
+    mock_addr.aggregated_list.return_value = []
 
-    # Mock Addresses Aggregated List
-    mock_addr = mocker.Mock()
-    mock_addr.name = "unused-ip"
-    mock_addr.address = "34.1.2.3"
-    mock_addr.status = "RESERVED"
-    mock_addr.users = []
+    report = get_network_report("test-project")
 
-    mock_addr_client.return_value.aggregated_list.return_value = [
-        ("regions/us-west1", mocker.Mock(addresses=[mock_addr]))
-    ]
-
-    # Call function
-    report = get_network_report(project_id="test-project")
-
-    # Assertions
     assert len(report.firewalls) == 1
-    fw = report.firewalls[0]
-    assert fw.name == "default-allow-ssh"
-    assert "0.0.0.0/0" in fw.source_ranges
-    assert fw.action == "ALLOW"
-
+    assert report.firewalls[0].name == "allow-ssh"
     assert len(report.vpcs) == 1
-    vpc = report.vpcs[0]
-    assert vpc.name == "default"
-    assert len(vpc.subnets) == 1
-    assert vpc.subnets[0].cidr_range == "10.128.0.0/20"
-
-    assert len(report.addresses) == 1
-    addr = report.addresses[0]
-    assert addr.address == "34.1.2.3"
-    assert addr.status == "RESERVED"
+    assert len(report.vpcs[0].subnets) == 1

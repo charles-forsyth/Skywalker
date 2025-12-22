@@ -1,19 +1,12 @@
 import pytest
 
-from skywalker.core import memory
 from skywalker.walkers.filestore import list_instances
-
-
-@pytest.fixture(autouse=True)
-def clear_cache():
-    memory.clear()
 
 
 def test_list_filestore_instances(mocker):
     # Mock the client
-    mock_client = mocker.patch(
-        "skywalker.walkers.filestore.filestore_v1.CloudFilestoreManagerClient"
-    )
+    mock_get = mocker.patch("skywalker.walkers.filestore.get_filestore_client")
+    mock_client = mock_get.return_value
 
     # Mock Instance
     mock_inst = mocker.Mock()
@@ -29,8 +22,6 @@ def test_list_filestore_instances(mocker):
     mock_inst.create_time = "2023-01-01"
 
     # Mock Networks
-
-    # Mock Networks
     mock_net = mocker.Mock()
     mock_net.ip_addresses = ["10.0.0.99"]
     mock_inst.networks = [mock_net]
@@ -41,7 +32,7 @@ def test_list_filestore_instances(mocker):
     mock_inst.file_shares = [mock_share]
 
     # Setup return
-    mock_client.return_value.list_instances.return_value = [mock_inst]
+    mock_client.list_instances.return_value = [mock_inst]
 
     # Call
     results = list_instances("test-proj", "us-central1")

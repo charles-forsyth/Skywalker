@@ -1,7 +1,9 @@
-from google.cloud import aiplatform, notebooks_v1
+from google.cloud import aiplatform
 from tenacity import retry
 
-from ..core import RETRY_CONFIG, memory
+from ..clients import get_notebook_client
+from ..core import RETRY_CONFIG
+from ..logger import logger
 from ..schemas.vertex import (
     GCPVertexEndpoint,
     GCPVertexModel,
@@ -10,7 +12,6 @@ from ..schemas.vertex import (
 )
 
 
-@memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def get_vertex_report(project_id: str, location: str) -> GCPVertexReport:
     """
@@ -19,17 +20,16 @@ def get_vertex_report(project_id: str, location: str) -> GCPVertexReport:
     report = GCPVertexReport()
 
     # 1. Notebooks (Workbench Instances)
-    # Using Notebooks Client separately because aiplatform SDK focuses on MLOps
-    nb_client = notebooks_v1.NotebookServiceClient()
+    nb_client = get_notebook_client()
     parent = f"projects/{project_id}/locations/{location}"
 
     try:
+        from google.cloud import notebooks_v1
         request = notebooks_v1.ListInstancesRequest(parent=parent)
         for nb in nb_client.list_instances(request=request):
             report.notebooks.append(
                 GCPVertexNotebook(
                     name=nb.name.split("/")[-1],
-                    # Notebooks don't have separate display names usually
                     display_name=nb.name.split("/")[-1],
                     state=str(nb.state.name),
                     creator=nb.creator,
@@ -37,11 +37,10 @@ def get_vertex_report(project_id: str, location: str) -> GCPVertexReport:
                     location=location,
                 )
             )
-    except Exception:
-        # Region might not support Notebooks or API disabled
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to list Vertex Notebooks in {location} for {project_id}: {e}")
 
-    # Initialize Vertex AI SDK for this location
+    # Initialize Vertex AI SDK for this location (Models/Endpoints)
     try:
         aiplatform.init(project=project_id, location=location)
 
@@ -59,9 +58,7 @@ def get_vertex_report(project_id: str, location: str) -> GCPVertexReport:
 
         # 3. Endpoints
         for ep in aiplatform.Endpoint.list():
-            # count deployed models
             deployed_count = len(ep.traffic_split) if ep.traffic_split else 0
-
             report.endpoints.append(
                 GCPVertexEndpoint(
                     name=ep.resource_name.split("/")[-1],
@@ -71,7 +68,7 @@ def get_vertex_report(project_id: str, location: str) -> GCPVertexReport:
                 )
             )
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Vertex AI API not enabled or failed in {location} for {project_id}: {e}")
 
     return report

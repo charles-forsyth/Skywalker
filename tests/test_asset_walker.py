@@ -1,16 +1,11 @@
 import pytest
 
-from skywalker.core import memory
 from skywalker.walkers.asset import search_all_instances
 
 
-@pytest.fixture(autouse=True)
-def clear_cache():
-    memory.clear()
-
-
 def test_search_all_instances(mocker):
-    mock_client = mocker.patch("skywalker.walkers.asset.asset_v1.AssetServiceClient")
+    mock_get = mocker.patch("skywalker.walkers.asset.get_asset_client")
+    mock_client = mock_get.return_value
 
     # Mock Asset Response
     mock_res = mocker.Mock()
@@ -19,7 +14,7 @@ def test_search_all_instances(mocker):
     mock_res.project = "projects/test-proj"
     mock_res.additional_attributes = {"id": "123", "machineType": "n1-standard-1"}
 
-    mock_client.return_value.search_all_resources.return_value = [mock_res]
+    mock_client.search_all_resources.return_value = [mock_res]
 
     results = search_all_instances("test-proj")
 
@@ -28,7 +23,7 @@ def test_search_all_instances(mocker):
     assert results["123"]["machine_type"] == "n1-standard-1"
 
     # Verify default scope handling
-    mock_client.return_value.search_all_resources.assert_called_with(
+    mock_client.search_all_resources.assert_called_with(
         request={
             "scope": "projects/test-proj",
             "asset_types": ["compute.googleapis.com/Instance"],

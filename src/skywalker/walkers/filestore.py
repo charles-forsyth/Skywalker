@@ -1,17 +1,17 @@
 from google.cloud import filestore_v1
 from tenacity import retry
 
-from ..core import RETRY_CONFIG, memory
+from ..clients import get_filestore_client
+from ..core import RETRY_CONFIG
 from ..schemas.filestore import GCPFilestoreInstance
 
 
-@memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def list_instances(project_id: str, location: str) -> list[GCPFilestoreInstance]:
     """
     Lists all Filestore instances in a specific location (region or zone).
     """
-    client = filestore_v1.CloudFilestoreManagerClient()
+    client = get_filestore_client()
     parent = f"projects/{project_id}/locations/{location}"
 
     results = []

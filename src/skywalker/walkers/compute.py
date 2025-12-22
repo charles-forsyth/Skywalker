@@ -3,7 +3,14 @@ import time
 from google.cloud import compute_v1, monitoring_v3
 from tenacity import retry
 
-from ..core import RETRY_CONFIG, memory
+from ..clients import (
+    get_compute_images_client,
+    get_compute_instances_client,
+    get_compute_machine_images_client,
+    get_compute_snapshots_client,
+    get_monitoring_client,
+)
+from ..core import RETRY_CONFIG
 from ..logger import logger
 from ..schemas.compute import (
     GCPComputeInstance,
@@ -19,10 +26,10 @@ def _fetch_performance_metrics(
     project_id: str, zone: str
 ) -> dict[str, dict[str, float]]:
     """
-    Fetches recent CPU and Memory metrics for all instances in a zone.
-    Returns a dict mapping instance_id -> { 'cpu': float, 'mem': float }
+    Fetches recent CPU, Memory, and GPU metrics for all instances in a zone.
+    Returns a dict mapping instance_id -> { 'cpu': float, 'mem': float, ... }
     """
-    client = monitoring_v3.MetricServiceClient()
+    client = get_monitoring_client()
     project_name = f"projects/{project_id}"
 
     # Last 10 minutes to ensure we catch a data point
@@ -59,10 +66,9 @@ def _fetch_performance_metrics(
                     ts.points[0].value.double_value * 100
                 )
     except Exception as e:
-        # Metrics are optional, log debug/warning but don't crash
         logger.debug(f"Failed to fetch CPU metrics for {zone}: {e}")
 
-    # 2. Memory Usage (requires Ops Agent for deep metrics)
+    # 2. Memory Usage (requires Ops Agent)
     try:
         mem_filter = (
             'metric.type = "agent.googleapis.com/memory/percent_used" '
@@ -102,8 +108,6 @@ def _fetch_performance_metrics(
         for ts in gpu_util_results:
             instance_id = ts.resource.labels.get("instance_id")
             if instance_id and ts.points:
-                # GPU metrics can be per-GPU (device_id label)
-                # We will take the MAX utilization of any GPU on the instance
                 val = ts.points[0].value.double_value
                 inst_data = metrics_map.setdefault(instance_id, {})
                 current_max = inst_data.get("gpu_util", 0.0)
@@ -111,8 +115,7 @@ def _fetch_performance_metrics(
     except Exception as e:
         logger.debug(f"Failed to fetch GPU utilization for {zone}: {e}")
 
-    # 4. GPU Memory Usage (Ops Agent)
-    # The metric agent.googleapis.com/gpu/memory/utilization exists!
+    # 4. GPU Memory (Ops Agent)
     try:
         gpu_mem_util_filter = (
             'metric.type = "agent.googleapis.com/gpu/memory/utilization" '
@@ -129,7 +132,7 @@ def _fetch_performance_metrics(
         for ts in gpu_mem_results:
             instance_id = ts.resource.labels.get("instance_id")
             if instance_id and ts.points:
-                val = ts.points[0].value.double_value * 100  # It returns 0.0-1.0
+                val = ts.points[0].value.double_value * 100
                 inst_data = metrics_map.setdefault(instance_id, {})
                 current_max = inst_data.get("gpu_mem", 0.0)
                 inst_data["gpu_mem"] = max(current_max, val)
@@ -139,29 +142,19 @@ def _fetch_performance_metrics(
     return metrics_map
 
 
-@memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
-def list_instances(
-    project_id: str, zone: str, include_metrics: bool = False
+def _list_instances_inventory(
+    project_id: str, zone: str
 ) -> list[GCPComputeInstance]:
     """
-    Lists all instances in a given zone for a project with deep details.
-    Cached by joblib and retried by tenacity on failure.
+    Fetches raw inventory of instances. Cached.
     """
-    instance_client = compute_v1.InstancesClient()
+    instance_client = get_compute_instances_client()
     request = compute_v1.ListInstancesRequest(project=project_id, zone=zone)
 
     results = []
 
-    # Optional metrics fetch for the entire zone
-    metrics = {}
-    if include_metrics:
-        metrics = _fetch_performance_metrics(project_id, zone)
-
     for instance in instance_client.list(request=request):
-        # ... (rest of the logic remains same, just update the constructor)
-        iid = str(instance.id)
-        inst_metrics = metrics.get(iid, {})
         # 1. Clean Machine Type
         m_type = instance.machine_type
         machine_type_clean = m_type.split("/")[-1] if m_type else "unknown"
@@ -170,7 +163,6 @@ def list_instances(
         gpus = []
         if instance.guest_accelerators:
             for acc in instance.guest_accelerators:
-                # accelerator_type is a URL, e.g. .../nvidia-tesla-t4
                 acc_type = acc.accelerator_type.split("/")[-1]
                 gpus.append(
                     GCPGpu(name=acc_type, count=acc.accelerator_count, type=acc_type)
@@ -184,7 +176,7 @@ def list_instances(
                     GCPDisk(
                         name=d.device_name or "unknown",
                         size_gb=d.disk_size_gb,
-                        type=str(d.type_),  # Use type_ to avoid reserved word
+                        type=str(d.type_),
                         boot=d.boot,
                     )
                 )
@@ -193,11 +185,9 @@ def list_instances(
         internal_ip = None
         external_ip = None
         if instance.network_interfaces:
-            # Usually the first interface is the primary one
             nic = instance.network_interfaces[0]
             internal_ip = nic.network_i_p
             if nic.access_configs:
-                # Access configs hold external IPs (like NAT)
                 external_ip = nic.access_configs[0].nat_i_p
 
         results.append(
@@ -213,23 +203,42 @@ def list_instances(
                 gpus=gpus,
                 internal_ip=internal_ip,
                 external_ip=external_ip,
-                cpu_utilization=inst_metrics.get("cpu"),
-                memory_usage=inst_metrics.get("mem"),
-                gpu_utilization=inst_metrics.get("gpu_util"),
-                gpu_memory_usage=inst_metrics.get("gpu_mem"),
             )
         )
 
     return results
 
 
-@memory.cache  # type: ignore[untyped-decorator]
+def list_instances(
+    project_id: str, zone: str, include_metrics: bool = False
+) -> list[GCPComputeInstance]:
+    """
+    Public API: Lists instances, optionally enriched with live metrics.
+    Inventory is cached; Metrics are NOT cached.
+    """
+    # 1. Get Inventory (Cached)
+    instances = _list_instances_inventory(project_id, zone)
+
+    # 2. Get Metrics (Live) and Merge
+    if include_metrics:
+        metrics = _fetch_performance_metrics(project_id, zone)
+        for inst in instances:
+            if inst.id in metrics:
+                m = metrics[inst.id]
+                inst.cpu_utilization = m.get("cpu")
+                inst.memory_usage = m.get("mem")
+                inst.gpu_utilization = m.get("gpu_util")
+                inst.gpu_memory_usage = m.get("gpu_mem")
+
+    return instances
+
+
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def list_images(project_id: str) -> list[GCPImage]:
     """
     Lists all custom images in a project.
     """
-    image_client = compute_v1.ImagesClient()
+    image_client = get_compute_images_client()
     request = compute_v1.ListImagesRequest(project=project_id)
 
     results = []
@@ -247,13 +256,12 @@ def list_images(project_id: str) -> list[GCPImage]:
     return results
 
 
-@memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def list_machine_images(project_id: str) -> list[GCPMachineImage]:
     """
     Lists all Machine Images (VM Backups) in a project.
     """
-    client = compute_v1.MachineImagesClient()
+    client = get_compute_machine_images_client()
     request = compute_v1.ListMachineImagesRequest(project=project_id)
 
     results = []
@@ -270,13 +278,12 @@ def list_machine_images(project_id: str) -> list[GCPMachineImage]:
     return results
 
 
-@memory.cache  # type: ignore[untyped-decorator]
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def list_snapshots(project_id: str) -> list[GCPSnapshot]:
     """
     Lists all disk snapshots in a project.
     """
-    snapshot_client = compute_v1.SnapshotsClient()
+    snapshot_client = get_compute_snapshots_client()
     request = compute_v1.ListSnapshotsRequest(project=project_id)
 
     results = []

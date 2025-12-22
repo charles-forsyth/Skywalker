@@ -1,6 +1,5 @@
 import pytest
 
-from skywalker.core import memory
 from skywalker.walkers.compute import (
     list_images,
     list_instances,
@@ -9,15 +8,10 @@ from skywalker.walkers.compute import (
 )
 
 
-@pytest.fixture(autouse=True)
-def clear_cache():
-    """Clear joblib caching for all tests in this module."""
-    memory.clear()
-
-
 def test_list_instances_deep_mock(mocker):
-    # Mock the InstancesClient
-    mock_client = mocker.patch("skywalker.walkers.compute.compute_v1.InstancesClient")
+    # Mock the Client Getters
+    mock_get_client = mocker.patch("skywalker.walkers.compute.get_compute_instances_client")
+    mock_client_instance = mock_get_client.return_value
 
     # Create a mock instance object
     mock_instance = mocker.Mock()
@@ -51,7 +45,7 @@ def test_list_instances_deep_mock(mocker):
     mock_instance.network_interfaces = [mock_nic]
 
     # Configure the mock client
-    mock_client.return_value.list.return_value = [mock_instance]
+    mock_client_instance.list.return_value = [mock_instance]
 
     # Call the function
     instances = list_instances(project_id="test-project", zone="us-west1-b")
@@ -72,11 +66,12 @@ def test_list_instances_deep_mock(mocker):
     assert inst.internal_ip == "10.0.0.1"
     assert inst.external_ip == "34.1.2.3"
 
-    mock_client.return_value.list.assert_called_once()
+    mock_client_instance.list.assert_called_once()
 
 
 def test_list_images_mock(mocker):
-    mock_client = mocker.patch("skywalker.walkers.compute.compute_v1.ImagesClient")
+    mock_get = mocker.patch("skywalker.walkers.compute.get_compute_images_client")
+    mock_client = mock_get.return_value
 
     mock_img = mocker.Mock()
     mock_img.name = "my-custom-image"
@@ -86,7 +81,7 @@ def test_list_images_mock(mocker):
     mock_img.archive_size_bytes = 1024 * 1024 * 1024  # 1GB
     mock_img.creation_timestamp = "2023-01-01"
 
-    mock_client.return_value.list.return_value = [mock_img]
+    mock_client.list.return_value = [mock_img]
 
     images = list_images("test-project")
     assert len(images) == 1
@@ -95,9 +90,10 @@ def test_list_images_mock(mocker):
 
 
 def test_list_machine_images_mock(mocker):
-    mock_client = mocker.patch(
-        "skywalker.walkers.compute.compute_v1.MachineImagesClient"
+    mock_get = mocker.patch(
+        "skywalker.walkers.compute.get_compute_machine_images_client"
     )
+    mock_client = mock_get.return_value
 
     mock_img = mocker.Mock()
     mock_img.name = "my-machine-image"
@@ -106,7 +102,7 @@ def test_list_machine_images_mock(mocker):
     mock_img.total_storage_bytes = 2048 * 1024 * 1024  # 2GB
     mock_img.creation_timestamp = "2023-03-01"
 
-    mock_client.return_value.list.return_value = [mock_img]
+    mock_client.list.return_value = [mock_img]
 
     images = list_machine_images("test-project")
     assert len(images) == 1
@@ -115,7 +111,8 @@ def test_list_machine_images_mock(mocker):
 
 
 def test_list_snapshots_mock(mocker):
-    mock_client = mocker.patch("skywalker.walkers.compute.compute_v1.SnapshotsClient")
+    mock_get = mocker.patch("skywalker.walkers.compute.get_compute_snapshots_client")
+    mock_client = mock_get.return_value
 
     mock_snap = mocker.Mock()
     mock_snap.name = "my-snapshot"
@@ -125,7 +122,7 @@ def test_list_snapshots_mock(mocker):
     mock_snap.storage_bytes = 500000000
     mock_snap.creation_timestamp = "2023-02-01"
 
-    mock_client.return_value.list.return_value = [mock_snap]
+    mock_client.list.return_value = [mock_snap]
 
     snaps = list_snapshots("test-project")
     assert len(snaps) == 1
@@ -135,10 +132,11 @@ def test_list_snapshots_mock(mocker):
 
 def test_list_instances_with_metrics(mocker):
     # Mock clients
-    mock_compute = mocker.patch("skywalker.walkers.compute.compute_v1.InstancesClient")
-    mock_monitor = mocker.patch(
-        "skywalker.walkers.compute.monitoring_v3.MetricServiceClient"
-    )
+    mock_get_compute = mocker.patch("skywalker.walkers.compute.get_compute_instances_client")
+    mock_compute = mock_get_compute.return_value
+    
+    mock_get_monitor = mocker.patch("skywalker.walkers.compute.get_monitoring_client")
+    mock_monitor = mock_get_monitor.return_value
 
     # Mock Instance
     mock_inst = mocker.Mock()
@@ -152,7 +150,7 @@ def test_list_instances_with_metrics(mocker):
     mock_inst.disks = []
     mock_inst.network_interfaces = []
 
-    mock_compute.return_value.list.return_value = [mock_inst]
+    mock_compute.list.return_value = [mock_inst]
 
     # Mock Metrics response
     # 1. CPU
@@ -169,8 +167,8 @@ def test_list_instances_with_metrics(mocker):
     mock_point_mem.value.double_value = 15.5  # 15.5%
     mock_ts_mem.points = [mock_point_mem]
 
-    # Configure Monitor Mock side_effect to return CPU then Mem, then empty for GPUs
-    mock_monitor.return_value.list_time_series.side_effect = [
+    # Configure Monitor Mock side_effect
+    mock_monitor.list_time_series.side_effect = [
         [mock_ts_cpu],
         [mock_ts_mem],
         [],  # GPU Util
@@ -184,14 +182,15 @@ def test_list_instances_with_metrics(mocker):
     assert instances[0].cpu_utilization == pytest.approx(42.0)
     assert instances[0].memory_usage == pytest.approx(15.5)
 
-    assert mock_monitor.return_value.list_time_series.call_count == 4
+    assert mock_monitor.list_time_series.call_count == 4
 
 
 def test_list_instances_gpu_metrics(mocker):
-    mock_compute = mocker.patch("skywalker.walkers.compute.compute_v1.InstancesClient")
-    mock_monitor = mocker.patch(
-        "skywalker.walkers.compute.monitoring_v3.MetricServiceClient"
-    )
+    mock_get_compute = mocker.patch("skywalker.walkers.compute.get_compute_instances_client")
+    mock_compute = mock_get_compute.return_value
+    
+    mock_get_monitor = mocker.patch("skywalker.walkers.compute.get_monitoring_client")
+    mock_monitor = mock_get_monitor.return_value
 
     mock_inst = mocker.Mock()
     mock_inst.name = "gpu-node"
@@ -206,7 +205,7 @@ def test_list_instances_gpu_metrics(mocker):
     mock_inst.disks = []
     mock_inst.network_interfaces = []
 
-    mock_compute.return_value.list.return_value = [mock_inst]
+    mock_compute.list.return_value = [mock_inst]
 
     # Mock GPU Util Response
     mock_ts = mocker.Mock()
@@ -214,7 +213,7 @@ def test_list_instances_gpu_metrics(mocker):
     mock_ts.points = [mocker.Mock(value=mocker.Mock(double_value=0.75))]  # 75%
 
     # Side effects: CPU (empty), Mem (empty), GPU Util (hit), GPU Mem (empty)
-    mock_monitor.return_value.list_time_series.side_effect = [[], [], [mock_ts], []]
+    mock_monitor.list_time_series.side_effect = [[], [], [mock_ts], []]
 
     instances = list_instances("test-proj", "us-zone", include_metrics=True)
     assert len(instances) == 1
