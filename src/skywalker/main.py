@@ -679,9 +679,6 @@ Examples:
                 log_console.print("[yellow]No metrics found in scope.[/yellow]")
                 return
 
-            # Fill NaNs for cleaner output
-            df.fillna(0, inplace=True)
-
             # Console Output (Rich Table)
             if not args.json:
                 table = Table(title="Fleet Top Consumers")
@@ -692,22 +689,42 @@ Examples:
                 table.add_column("Mem %", justify="right")
                 table.add_column("GPU Util %", justify="right")
 
-                # Sort by CPU desc
-                top_cpu = df.sort_values(by="cpu_percent", ascending=False).head(
-                    args.limit
-                )
+                # Sort by CPU desc (treat NaN as 0 for sorting)
+                top_cpu = df.sort_values(
+                    by="cpu_percent", ascending=False, na_position="last"
+                ).head(args.limit)
 
                 for _, row in top_cpu.iterrows():
-                    cpu_style = "red" if row["cpu_percent"] > 90 else "white"
-                    gpu_style = "magenta" if row["gpu_utilization"] > 0 else "dim"
+                    # CPU
+                    if pd.notna(row.get("cpu_percent")):
+                        cpu_val = row["cpu_percent"]
+                        cpu_style = "red" if cpu_val > 90 else "white"
+                        cpu_str = f"[{cpu_style}]{cpu_val:.1f}%[/{cpu_style}]"
+                    else:
+                        cpu_str = "[dim]N/A[/dim]"
+
+                    # Memory
+                    if pd.notna(row.get("memory_percent")):
+                        mem_val = row["memory_percent"]
+                        mem_str = f"{mem_val:.1f}%"
+                    else:
+                        mem_str = "[dim]N/A[/dim]"
+
+                    # GPU
+                    if pd.notna(row.get("gpu_utilization")):
+                        gpu_val = row["gpu_utilization"]
+                        gpu_style = "magenta" if gpu_val > 0 else "dim"
+                        gpu_str = f"[{gpu_style}]{gpu_val:.1f}%[/{gpu_style}]"
+                    else:
+                        gpu_str = "[dim]-[/dim]"
 
                     table.add_row(
                         str(row["project_id"]),
                         str(row["instance_name"]),
                         str(row["machine_type"]),
-                        f"[{cpu_style}]{row['cpu_percent']:.1f}%[/{cpu_style}]",
-                        f"{row['memory_percent']:.1f}%",
-                        f"[{gpu_style}]{row['gpu_utilization']:.1f}%[/{gpu_style}]",
+                        cpu_str,
+                        mem_str,
+                        gpu_str,
                     )
                 out_console.print(table)
                 out_console.print(
