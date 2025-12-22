@@ -1,4 +1,3 @@
-import pytest
 
 from skywalker.walkers.filestore import list_instances
 

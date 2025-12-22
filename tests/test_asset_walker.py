@@ -1,4 +1,3 @@
-import pytest
 
 from skywalker.walkers.asset import search_all_instances
 

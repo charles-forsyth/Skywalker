@@ -1,4 +1,3 @@
-import pytest
 
 from skywalker.walkers.gke import list_clusters
 

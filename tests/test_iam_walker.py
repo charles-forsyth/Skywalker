@@ -1,4 +1,3 @@
-import pytest
 
 from skywalker.walkers.iam import get_iam_report
 

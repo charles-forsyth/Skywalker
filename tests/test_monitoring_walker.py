@@ -1,4 +1,3 @@
-import pytest
 
 from skywalker.walkers.monitoring import fetch_fleet_metrics
 
