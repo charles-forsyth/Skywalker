@@ -228,7 +228,9 @@ def list_instances(
                 inst.gpu_utilization = m.get("gpu_util")
                 inst.gpu_memory_usage = m.get("gpu_mem")
 
-    return instances
+    from typing import cast
+
+    return cast(list[GCPComputeInstance], instances)
 
 
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]

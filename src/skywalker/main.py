@@ -49,11 +49,8 @@ def scan_compute_zone(
     project_id: str, zone: str, include_metrics: bool = False
 ) -> list[GCPComputeInstance]:
     try:
-        return cast(
-            list[GCPComputeInstance],
-            compute.list_instances(
-                project_id=project_id, zone=zone, include_metrics=include_metrics
-            ),
+        return compute.list_instances(
+            project_id=project_id, zone=zone, include_metrics=include_metrics
         )
     except Exception as e:
         logger.warning(f"Failed to scan compute zone {zone} for {project_id}: {e}")
