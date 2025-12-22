@@ -4,6 +4,7 @@ from google.cloud import compute_v1, monitoring_v3
 from tenacity import retry
 
 from ..core import RETRY_CONFIG, memory
+from ..logger import logger
 from ..schemas.compute import (
     GCPComputeInstance,
     GCPDisk,
@@ -57,8 +58,9 @@ def _fetch_performance_metrics(
                 metrics_map.setdefault(instance_id, {})["cpu"] = (
                     ts.points[0].value.double_value * 100
                 )
-    except Exception:
-        pass
+    except Exception as e:
+        # Metrics are optional, log debug/warning but don't crash
+        logger.debug(f"Failed to fetch CPU metrics for {zone}: {e}")
 
     # 2. Memory Usage (requires Ops Agent for deep metrics)
     try:
@@ -80,8 +82,8 @@ def _fetch_performance_metrics(
                 metrics_map.setdefault(instance_id, {})["mem"] = ts.points[
                     0
                 ].value.double_value
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to fetch Memory metrics for {zone}: {e}")
 
     # 3. GPU Utilization (Ops Agent)
     try:
@@ -106,8 +108,8 @@ def _fetch_performance_metrics(
                 inst_data = metrics_map.setdefault(instance_id, {})
                 current_max = inst_data.get("gpu_util", 0.0)
                 inst_data["gpu_util"] = max(current_max, val)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to fetch GPU utilization for {zone}: {e}")
 
     # 4. GPU Memory Usage (Ops Agent)
     # The metric agent.googleapis.com/gpu/memory/utilization exists!
@@ -131,8 +133,8 @@ def _fetch_performance_metrics(
                 inst_data = metrics_map.setdefault(instance_id, {})
                 current_max = inst_data.get("gpu_mem", 0.0)
                 inst_data["gpu_mem"] = max(current_max, val)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to fetch GPU Memory metrics for {zone}: {e}")
 
     return metrics_map
 

@@ -20,6 +20,7 @@ from rich.progress import (
 from rich.table import Table
 
 from .core import STANDARD_REGIONS, ZONE_SUFFIXES
+from .logger import logger
 from .schemas.compute import GCPComputeInstance, GCPComputeReport
 from .schemas.filestore import GCPFilestoreInstance
 from .schemas.gke import GCPCluster
@@ -54,7 +55,8 @@ def scan_compute_zone(
                 project_id=project_id, zone=zone, include_metrics=include_metrics
             ),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to scan compute zone {zone} for {project_id}: {e}")
         return []
 
 
@@ -66,7 +68,10 @@ def scan_filestore_location(
             list[GCPFilestoreInstance],
             filestore.list_instances(project_id=project_id, location=location),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            f"Failed to scan filestore location {location} for {project_id}: {e}"
+        )
         return []
 
 
@@ -76,7 +81,10 @@ def scan_run_region(project_id: str, region: str) -> list[GCPCloudRunService]:
             list[GCPCloudRunService],
             run.list_services(project_id=project_id, region=region),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            f"Failed to scan Cloud Run region {region} for {project_id}: {e}"
+        )
         return []
 
 
@@ -86,7 +94,8 @@ def scan_gke_location(project_id: str, location: str) -> list[GCPCluster]:
             list[GCPCluster],
             gke.list_clusters(project_id=project_id, location=location),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to scan GKE location {location} for {project_id}: {e}")
         return []
 
 
@@ -96,7 +105,10 @@ def scan_vertex_location(project_id: str, location: str) -> GCPVertexReport:
             GCPVertexReport,
             vertex.get_vertex_report(project_id=project_id, location=location),
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            f"Failed to scan Vertex AI location {location} for {project_id}: {e}"
+        )
         return GCPVertexReport()
 
 

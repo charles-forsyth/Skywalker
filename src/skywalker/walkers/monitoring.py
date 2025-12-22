@@ -2,10 +2,12 @@ import time
 from collections import defaultdict
 from typing import Any
 
+from google.api_core import exceptions
 from google.cloud import monitoring_v3
 from tenacity import retry
 
 from ..core import RETRY_CONFIG, memory
+from ..logger import logger
 
 
 @memory.cache  # type: ignore[untyped-decorator]
@@ -97,8 +99,13 @@ def fetch_fleet_metrics(scoping_project_id: str) -> list[dict[str, Any]]:
                     else:
                         fleet_data[key][label] = val
 
-        except Exception:
-            # Squelch permission errors or partial failures
-            pass
+        except exceptions.PermissionDenied:
+            logger.warning(
+                f"Permission denied fetching metric {label} from scope {name}"
+            )
+        except exceptions.GoogleAPICallError as e:
+            logger.warning(f"Metric API error for {label}: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in metric fetch {label}: {e}")
 
     return list(fleet_data.values())
