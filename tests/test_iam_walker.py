@@ -7,7 +7,7 @@ def test_get_iam_report_mock(mocker):
     # Mock Getters
     mock_get_iam = mocker.patch("skywalker.walkers.iam.get_iam_client")
     mock_iam = mock_get_iam.return_value
-    
+
     mock_get_proj = mocker.patch("skywalker.walkers.iam.get_projects_client")
     mock_proj = mock_get_proj.return_value
 

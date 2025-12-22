@@ -25,6 +25,7 @@ def get_vertex_report(project_id: str, location: str) -> GCPVertexReport:
 
     try:
         from google.cloud import notebooks_v1
+
         request = notebooks_v1.ListInstancesRequest(parent=parent)
         for nb in nb_client.list_instances(request=request):
             report.notebooks.append(
@@ -38,7 +39,9 @@ def get_vertex_report(project_id: str, location: str) -> GCPVertexReport:
                 )
             )
     except Exception as e:
-        logger.debug(f"Failed to list Vertex Notebooks in {location} for {project_id}: {e}")
+        logger.debug(
+            f"Failed to list Vertex Notebooks in {location} for {project_id}: {e}"
+        )
 
     # Initialize Vertex AI SDK for this location (Models/Endpoints)
     try:
@@ -69,6 +72,8 @@ def get_vertex_report(project_id: str, location: str) -> GCPVertexReport:
             )
 
     except Exception as e:
-        logger.debug(f"Vertex AI API not enabled or failed in {location} for {project_id}: {e}")
+        logger.debug(
+            f"Vertex AI API not enabled or failed in {location} for {project_id}: {e}"
+        )
 
     return report

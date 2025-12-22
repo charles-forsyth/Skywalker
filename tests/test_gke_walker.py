@@ -29,9 +29,7 @@ def test_list_clusters_mock(mocker):
     mock_cluster.node_pools = [mock_np]
 
     # Configure the mock client
-    mock_client.list_clusters.return_value = mocker.Mock(
-        clusters=[mock_cluster]
-    )
+    mock_client.list_clusters.return_value = mocker.Mock(clusters=[mock_cluster])
 
     # Call the function
     clusters = list_clusters(project_id="test-project", location="us-west1")

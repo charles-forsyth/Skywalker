@@ -7,7 +7,7 @@ def test_get_vertex_report_mock(mocker):
     # Mock Clients
     mock_get_nb = mocker.patch("skywalker.walkers.vertex.get_notebook_client")
     mock_nb = mock_get_nb.return_value
-    
+
     # Mock aiplatform (high level SDK is harder to mock, so we mock the list methods)
     mock_model_list = mocker.patch("google.cloud.aiplatform.Model.list")
     mock_ep_list = mocker.patch("google.cloud.aiplatform.Endpoint.list")
@@ -20,7 +20,7 @@ def test_get_vertex_report_mock(mocker):
     mock_notebook.creator = "user@example.com"
     mock_notebook.update_time = "2023-01-01"
     mock_nb.list_instances.return_value = [mock_notebook]
-    
+
     # Setup Models
     mock_model = mocker.Mock()
     mock_model.resource_name = "projects/p/locations/u/models/m1"
@@ -28,7 +28,7 @@ def test_get_vertex_report_mock(mocker):
     mock_model.create_time = "2023-01-01"
     mock_model.version_id = "1"
     mock_model_list.return_value = [mock_model]
-    
+
     # Setup Endpoints
     mock_ep = mocker.Mock()
     mock_ep.resource_name = "projects/p/locations/u/endpoints/e1"

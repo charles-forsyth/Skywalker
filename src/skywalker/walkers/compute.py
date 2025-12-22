@@ -143,9 +143,7 @@ def _fetch_performance_metrics(
 
 
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
-def _list_instances_inventory(
-    project_id: str, zone: str
-) -> list[GCPComputeInstance]:
+def _list_instances_inventory(project_id: str, zone: str) -> list[GCPComputeInstance]:
     """
     Fetches raw inventory of instances. Cached.
     """

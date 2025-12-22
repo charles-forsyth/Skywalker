@@ -10,7 +10,9 @@ from skywalker.walkers.compute import (
 
 def test_list_instances_deep_mock(mocker):
     # Mock the Client Getters
-    mock_get_client = mocker.patch("skywalker.walkers.compute.get_compute_instances_client")
+    mock_get_client = mocker.patch(
+        "skywalker.walkers.compute.get_compute_instances_client"
+    )
     mock_client_instance = mock_get_client.return_value
 
     # Create a mock instance object
@@ -132,9 +134,11 @@ def test_list_snapshots_mock(mocker):
 
 def test_list_instances_with_metrics(mocker):
     # Mock clients
-    mock_get_compute = mocker.patch("skywalker.walkers.compute.get_compute_instances_client")
+    mock_get_compute = mocker.patch(
+        "skywalker.walkers.compute.get_compute_instances_client"
+    )
     mock_compute = mock_get_compute.return_value
-    
+
     mock_get_monitor = mocker.patch("skywalker.walkers.compute.get_monitoring_client")
     mock_monitor = mock_get_monitor.return_value
 
@@ -186,9 +190,11 @@ def test_list_instances_with_metrics(mocker):
 
 
 def test_list_instances_gpu_metrics(mocker):
-    mock_get_compute = mocker.patch("skywalker.walkers.compute.get_compute_instances_client")
+    mock_get_compute = mocker.patch(
+        "skywalker.walkers.compute.get_compute_instances_client"
+    )
     mock_compute = mock_get_compute.return_value
-    
+
     mock_get_monitor = mocker.patch("skywalker.walkers.compute.get_monitoring_client")
     mock_monitor = mock_get_monitor.return_value
 

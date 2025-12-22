@@ -7,13 +7,13 @@ def test_get_network_report_mock(mocker):
     # Mock all getters
     mock_get_fw = mocker.patch("skywalker.walkers.network.get_firewalls_client")
     mock_fw = mock_get_fw.return_value
-    
+
     mock_get_net = mocker.patch("skywalker.walkers.network.get_networks_client")
     mock_net = mock_get_net.return_value
-    
+
     mock_get_sub = mocker.patch("skywalker.walkers.network.get_subnetworks_client")
     mock_sub = mock_get_sub.return_value
-    
+
     mock_get_addr = mocker.patch("skywalker.walkers.network.get_addresses_client")
     mock_addr = mock_get_addr.return_value
 
@@ -44,7 +44,7 @@ def test_get_network_report_mock(mocker):
     mock_sub.aggregated_list.return_value = [
         ("regions/us-west1", mocker.Mock(subnetworks=[mock_sn]))
     ]
-    
+
     # Setup Addresses
     mock_addr.aggregated_list.return_value = []
 

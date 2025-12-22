@@ -38,6 +38,8 @@ def list_services(project_id: str, region: str) -> list[GCPCloudRunService]:
                 )
             )
     except Exception as e:
-        logger.warning(f"Failed to list Cloud Run services in {region} for {project_id}: {e}")
+        logger.warning(
+            f"Failed to list Cloud Run services in {region} for {project_id}: {e}"
+        )
 
     return results

@@ -14,7 +14,7 @@ def test_list_sql_instances_mock(mocker):
         "databaseVersion": "POSTGRES_15",
         "state": "RUNNABLE",
         "ipAddresses": [{"type": "PRIMARY", "ipAddress": "1.2.3.4"}],
-        "settings": {"tier": "db-f1-micro", "dataDiskSizeGb": "10"}
+        "settings": {"tier": "db-f1-micro", "dataDiskSizeGb": "10"},
     }
 
     mock_service.instances.return_value.list.return_value.execute.return_value = {
