@@ -1,4 +1,3 @@
-
 from skywalker.walkers.network import get_network_report
 
 

@@ -415,16 +415,32 @@ def print_project_detailed(
             keys_text = f" | {len(sa.keys)} Keys" if sa.keys else ""
             console.print(f" - {sa.email} ({sa.display_name}) {status}{keys_text}")
 
-        console.print("Policy Highlights (Owners):")
+        console.print("Policy Highlights (Privileged Roles):")
+        interesting_roles = ["roles/owner", "roles/editor", "roles/viewer"]
         for binding in iam_report.policy_bindings:
-            if "roles/owner" in binding.role:
-                cats = binding.categorized_members
-                for user in cats["users"]:
-                    display_name = iam_report.user_display_names.get(user, "")
-                    name_str = f" ({display_name})" if display_name else ""
-                    console.print(f" - [blue]User[/blue]: {user}{name_str}")
-                for sa in cats["service_accounts"]:
-                    console.print(f" - [magenta]ServiceAccount[/magenta]: {sa}")
+            if binding.role in interesting_roles:
+                role_name = binding.role.split("/")[-1].upper()
+                # Only show Viewers if they are Users (to avoid noise)
+                if (
+                    binding.role == "roles/viewer"
+                    and not binding.categorized_members["users"]
+                ):
+                    continue
+
+                if binding.categorized_members["users"]:
+                    console.print(f"[bold]{role_name}[/bold]:")
+                    for user in binding.categorized_members["users"]:
+                        display_name = iam_report.user_display_names.get(user, "")
+                        name_str = f" ({display_name})" if display_name else ""
+                        console.print(f" - [blue]User[/blue]: {user}{name_str}")
+
+                # Show SAs for Owner/Editor
+                if (
+                    binding.role != "roles/viewer"
+                    and binding.categorized_members["service_accounts"]
+                ):
+                    for sa in binding.categorized_members["service_accounts"]:
+                        console.print(f" - [magenta]ServiceAccount[/magenta]: {sa}")
 
     # 5. SQL
     if "sql" in services:

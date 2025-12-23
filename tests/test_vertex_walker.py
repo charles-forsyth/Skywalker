@@ -1,4 +1,3 @@
-
 from skywalker.walkers.vertex import get_vertex_report
 
 

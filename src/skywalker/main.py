@@ -108,6 +108,11 @@ Examples:
         action="store_true",
         help="Legacy flag (caching is now disabled by default)",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (show warnings and errors)",
+    )
 
     args = parser.parse_args()
 
@@ -116,6 +121,12 @@ Examples:
         parser.error(
             "one of the arguments --project-id --all-projects --monitor is required"
         )
+
+    # Configure Logger Level
+    if args.verbose:
+        import logging
+
+        logger.setLevel(logging.WARNING)
 
     # Use stderr for logs/progress if stdout is piped for JSON
     log_console = Console(stderr=True, quiet=args.json)

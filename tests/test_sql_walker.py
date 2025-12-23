@@ -1,4 +1,3 @@
-
 from skywalker.walkers.sql import list_instances
 
 

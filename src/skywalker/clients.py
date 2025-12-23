@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
+import google.cloud.storage  # type: ignore[import-not-found, unused-ignore]
 from google.cloud import (
     asset_v1,
     compute_v1,
@@ -14,7 +15,6 @@ from google.cloud import (
     resourcemanager_v3,
     run_v2,
 )
-from google.cloud import storage  # type: ignore[attr-defined] # noqa: I001
 
 # Shared Client Registry (Lazy-loaded and cached)
 
@@ -108,4 +108,4 @@ def get_notebook_client() -> Any:
 
 @lru_cache(maxsize=1)
 def get_storage_client() -> Any:
-    return storage.Client()
+    return google.cloud.storage.Client()
