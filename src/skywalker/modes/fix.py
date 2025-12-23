@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 from rich.prompt import Confirm
 from rich.table import Table
 
@@ -51,9 +52,9 @@ def _install_agent(instance: dict[str, Any]) -> str:
         if res.returncode == 0:
             return f"[green]SUCCESS: {name}[/green]"
         err = res.stderr.strip().splitlines()[-1] if res.stderr else "Unknown error"
-        return f"[red]FAILED: {name} - {err}[/red]"
+        return f"[red]FAILED: {name} - {escape(err)}[/red]"
     except Exception as e:
-        return f"[red]ERROR: {name} - {e}[/red]"
+        return f"[red]ERROR: {name} - {escape(str(e))}[/red]"
 
 
 def _fix_ops_agent(args: argparse.Namespace, console: Console) -> None:

@@ -48,12 +48,12 @@ Examples:
         action="store_true",
         help="Enter Fleet Performance Monitoring Mode",
     )
-    group.add_argument(
+
+    parser.add_argument(
         "--fix",
         choices=["ops-agent"],
-        help="Interactive remediation mode (requires --monitor for ops-agent)",
+        help="Interactive remediation mode (requires --monitor or --project-id)",
     )
-
     parser.add_argument(
         "--scoping-project",
         help="Override default Scoping Project (ucr-research-computing)",
@@ -122,11 +122,14 @@ Examples:
     args = parser.parse_args()
 
     # Must validate required args manually since group is now optional for --version
-    if not any([args.project_id, args.all_projects, args.monitor, args.fix]):
-        parser.error(
-            "one of the arguments --project-id --all-projects "
-            "--monitor --fix is required"
-        )
+    if not any([args.project_id, args.all_projects, args.monitor]):
+        # Special case: allow --fix without the group if it handles its own scope
+        # but for ops-agent it needs --monitor or --project-id
+        if not args.fix:
+            parser.error(
+                "one of the arguments --project-id --all-projects "
+                "--monitor is required"
+            )
 
     # Configure Logger Level
     if args.verbose:
@@ -143,24 +146,25 @@ Examples:
     )
 
     # Dispatch to Modes
+    from rich.markup import escape
     if args.fix:
         try:
             fix.run_fix(args, log_console, out_console)
         except Exception as e:
-            logger.error(f"Fix Failed: {e}")
+            logger.error(f"Fix Failed: {escape(str(e))}")
             exit(1)
     elif args.monitor:
         try:
             monitor.run_fleet_monitor(args, log_console, out_console)
         except Exception as e:
-            logger.error(f"Fleet Monitor Failed: {e}")
+            logger.error(f"Fleet Monitor Failed: {escape(str(e))}")
             exit(1)
     else:
         # Audit Mode
         try:
             audit.run_fleet_audit(args, log_console, out_console)
         except Exception as e:
-            logger.error(f"Audit Failed: {e}")
+            logger.error(f"Audit Failed: {escape(str(e))}")
             exit(1)
 
 
