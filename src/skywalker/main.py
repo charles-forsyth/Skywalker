@@ -108,18 +108,28 @@ Examples:
         action="store_true",
         help="Legacy flag (caching is now disabled by default)",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (show warnings and errors)",
+    )
 
     args = parser.parse_args()
 
     # Must validate required args manually since group is now optional for --version
     if not any([args.project_id, args.all_projects, args.monitor]):
         parser.error(
-            "one of the arguments --project-id --all-projects --monitor is required"
+            "one of the arguments --project-id --all-projects "
+            "--monitor is required"
         )
+
+    # Configure Logger Level
+    if args.verbose:
+        import logging
+        logger.setLevel(logging.WARNING)
 
     # Use stderr for logs/progress if stdout is piped for JSON
     log_console = Console(stderr=True, quiet=args.json)
-    out_console = Console(quiet=args.json)
 
     log_console.print(
         "[bold green]Skywalker[/bold green] Ursa Major Auditor initialized."
