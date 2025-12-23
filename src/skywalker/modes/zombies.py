@@ -71,12 +71,13 @@ class ZombieHunter:
                 ):
                     self.zombies.append(
                         ZombieResource(
-                                                    resource_type="Static IP",
-                                                    project_id=project_id,
-                                                    name=addr.name,
-                                                                            details=addr.address,
-                                                                            monthly_cost_est=7.30,
-                                                                            reason="Reserved External IP not in use",                        )
+                            resource_type="Static IP",
+                            project_id=project_id,
+                            name=addr.name,
+                            details=addr.address,
+                            monthly_cost_est=7.30,
+                            reason="Reserved External IP not in use",
+                        )
                     )
         except Exception as e:
             logger.debug(f"Failed to hunt IPs in {project_id}: {e}")
