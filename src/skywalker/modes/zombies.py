@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import jinja2
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
@@ -205,21 +204,7 @@ def run_zombie_hunt(args: Any, log_console: Console, out_console: Console) -> No
     if args.html or args.report:
         log_console.print("\n[bold]Generating Zombie Hunter reports...[/bold]")
         try:
-            template_dir = Path(__file__).parent.parent / "templates"
-            env = jinja2.Environment(
-                loader=jinja2.FileSystemLoader(str(template_dir)),
-                autoescape=jinja2.select_autoescape(["html", "xml"]),
-            )
-            
-            # For now, we'll assume a basic report template or generate a simple one
-            # If report.html doesn't support zombies, we should create a specific one.
-            # I'll create a simple one here for the prototype.
-            
-            # Attempt to use specific zombie template if it exists
-            template_name = "report.html" # Fallback
-            
-            html_content = ""
-            # Simple inline HTML if template is complex to adapt
+            scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             html_content = f"""
             <html>
             <head><title>Zombie Hunter Report</title><style>
@@ -232,31 +217,36 @@ def run_zombie_hunt(args: Any, log_console: Console, out_console: Console) -> No
             <body>
             <h1>🧟 Skywalker Zombie Hunter Report</h1>
             <div class="summary">
-                <p><strong>Scan Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p><strong>Scan Time:</strong> {scan_time}</p>
                 <p><strong>Total Zombies Found:</strong> {len(hunter.zombies)}</p>
                 <p><strong>Total Estimated Waste:</strong> ${total_waste:.2f}/month</p>
             </div>
             <table>
-                <tr><th>Type</th><th>Project</th><th>Name</th><th>Details</th><th>Est. Cost/Mo</th><th>Reason</th></tr>
+                <tr><th>Type</th><th>Project</th><th>Name</th><th>Details</th>
+                <th>Est. Cost/Mo</th><th>Reason</th></tr>
             """
             for z in hunter.zombies:
-                html_content += f"<tr><td>{z.resource_type}</td><td>{z.project_id}</td><td>{z.name}</td><td>{z.details}</td><td>${z.monthly_cost_est:.2f}</td><td>{z.reason}</td></tr>"
-            
+                html_content += (
+                    f"<tr><td>{z.resource_type}</td><td>{z.project_id}</td>"
+                    f"<td>{z.name}</td><td>{z.details}</td>"
+                    f"<td>${z.monthly_cost_est:.2f}</td><td>{z.reason}</td></tr>"
+                )
             html_content += "</table></body></html>"
 
             if args.html:
                 with Path(args.html).open("w") as f:
                     f.write(html_content)
                 log_console.print(f"HTML Report saved to [bold]{args.html}[/bold]")
-            
+
             if args.report:
-                # Use weasyprint if available for PDF
                 try:
                     from weasyprint import HTML
+
                     HTML(string=html_content).write_pdf(args.report)
                     log_console.print(f"PDF Report saved to [bold]{args.report}[/bold]")
                 except ImportError:
-                    log_console.print("[red]PDF Generation requires 'weasyprint'. Skipping PDF.[/red]")
-        
+                    log_console.print(
+                        "[red]PDF Generation requires 'weasyprint'. skipping."
+                    )
         except Exception as e:
             log_console.print(f"[bold red]Failed to generate report:[/bold red] {e}")
