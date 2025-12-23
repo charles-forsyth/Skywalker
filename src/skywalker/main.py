@@ -48,7 +48,8 @@ Examples:
         action="store_true",
         help="Enter Fleet Performance Monitoring Mode",
     )
-    group.add_argument(
+
+    parser.add_argument(
         "--find-zombies",
         action="store_true",
         help="Enter Zombie Hunter Mode (find unused/wasteful resources)",
