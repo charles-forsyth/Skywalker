@@ -5,7 +5,7 @@ from rich.console import Console
 
 from .core import STANDARD_REGIONS
 from .logger import logger
-from .modes import audit, monitor
+from .modes import audit, fix, monitor
 
 
 def main() -> None:
@@ -47,6 +47,11 @@ Examples:
         "--monitor",
         action="store_true",
         help="Enter Fleet Performance Monitoring Mode",
+    )
+    group.add_argument(
+        "--fix",
+        choices=["ops-agent"],
+        help="Interactive remediation mode (requires --monitor for ops-agent)",
     )
 
     parser.add_argument(
@@ -117,9 +122,10 @@ Examples:
     args = parser.parse_args()
 
     # Must validate required args manually since group is now optional for --version
-    if not any([args.project_id, args.all_projects, args.monitor]):
+    if not any([args.project_id, args.all_projects, args.monitor, args.fix]):
         parser.error(
-            "one of the arguments --project-id --all-projects --monitor is required"
+            "one of the arguments --project-id --all-projects "
+            "--monitor --fix is required"
         )
 
     # Configure Logger Level
@@ -137,7 +143,13 @@ Examples:
     )
 
     # Dispatch to Modes
-    if args.monitor:
+    if args.fix:
+        try:
+            fix.run_fix(args, log_console, out_console)
+        except Exception as e:
+            logger.error(f"Fix Failed: {e}")
+            exit(1)
+    elif args.monitor:
         try:
             monitor.run_fleet_monitor(args, log_console, out_console)
         except Exception as e:
