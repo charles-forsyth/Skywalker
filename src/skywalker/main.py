@@ -160,6 +160,7 @@ Examples:
 
     # Dispatch to Modes
     from rich.markup import escape
+
     if args.fix:
         try:
             fix.run_fix(args, log_console, out_console)

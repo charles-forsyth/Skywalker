@@ -121,31 +121,29 @@ def fetch_inactive_resources(
     """
     Fetches the SUM of a metric over a long period to detect inactivity.
     Returns: {resource_name: total_value}
-    
+
     If total_value == 0, the resource is inactive (Zombie).
     """
     client = get_monitoring_client()
     name = f"projects/{project_id}"
-    
+
     now = time.time()
     seconds = int(now)
     start_seconds = seconds - (days * 86400)
-    
+
     interval = monitoring_v3.TimeInterval(
         {
             "end_time": {"seconds": seconds, "nanos": 0},
             "start_time": {"seconds": start_seconds, "nanos": 0},
         }
     )
-    
-    filter_str = (
-        f'metric.type = "{metric_type}" AND resource.type = "{resource_type}"'
-    )
-    
+
+    filter_str = f'metric.type = "{metric_type}" AND resource.type = "{resource_type}"'
+
     # Aggregation: Align by summing over the entire period
     # Note: 30 days is a huge window. We must use a large alignment period.
     alignment_period = {"seconds": days * 86400}
-    
+
     if not group_by:
         # Default grouping depends on resource type usually, but we need
         # the resource identifier labels.
@@ -162,7 +160,7 @@ def fetch_inactive_resources(
             "group_by_fields": group_by,
         }
     )
-    
+
     results = {}
     try:
         pages = client.list_time_series(
@@ -202,8 +200,8 @@ def fetch_inactive_resources(
                 )
 
             results[key] = val
-            
+
     except Exception as e:
         logger.debug(f"Failed to fetch inactivity metric {metric_type}: {e}")
-        
+
     return results

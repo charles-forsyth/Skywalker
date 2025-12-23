@@ -43,6 +43,7 @@ def get_compute_snapshots_client() -> Any:
 def get_disks_client() -> Any:
     return compute_v1.DisksClient()
 
+
 @lru_cache(maxsize=1)
 def get_firewalls_client() -> Any:
     return compute_v1.FirewallsClient()
