@@ -144,6 +144,10 @@ Examples:
             "--monitor --find-zombies is required"
         )
 
+    # Zombie Hunter defaults to all projects if no specific project is provided
+    if args.find_zombies and not args.project_id:
+        args.all_projects = True
+
     # Configure Logger Level
     if args.verbose:
         import logging
