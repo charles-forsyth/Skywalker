@@ -148,9 +148,12 @@ def _fix_ops_agent(args: argparse.Namespace, console: Console) -> None:
 
     # 5. Execute
     console.print("Launching installers (this may take a minute)...")
+    from concurrent.futures import Future
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(_install_agent, c) for c in candidates]
-        for future in as_completed(futures):  # type: ignore[arg-type]
+        install_futures: list[Future[str]] = [
+            executor.submit(_install_agent, c) for c in candidates
+        ]
+        for future in as_completed(install_futures):
             console.print(future.result())
 
 
