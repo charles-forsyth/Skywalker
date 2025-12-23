@@ -208,11 +208,31 @@ def run_zombie_hunt(args: Any, log_console: Console, out_console: Console) -> No
             html_content = f"""
             <html>
             <head><title>Zombie Hunter Report</title><style>
-            table {{ border-collapse: collapse; width: 100%; font-family: sans-serif; }}
-            th, td {{ text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }}
+            @page {{ size: A4 landscape; margin: 1cm; }}
+            body {{ font-family: sans-serif; font-size: 10pt; }}
+            table {{ 
+                border-collapse: collapse; 
+                width: 100%; 
+                table-layout: fixed; /* Enforce column widths */
+            }}
+            th, td {{ 
+                text-align: left; 
+                padding: 6px; 
+                border-bottom: 1px solid #ddd; 
+                word-wrap: break-word; /* Wrap long text like IDs */
+                overflow-wrap: break-word;
+            }}
             tr:nth-child(even) {{ background-color: #f2f2f2; }}
             th {{ background-color: #f44336; color: white; }}
-            .summary {{ background: #eee; padding: 20px; margin-bottom: 20px; }}
+            .summary {{ background: #eee; padding: 15px; margin-bottom: 20px; }}
+            
+            /* Column Sizing Guide */
+            th:nth-child(1) {{ width: 8%; }}  /* Type */
+            th:nth-child(2) {{ width: 20%; }} /* Project */
+            th:nth-child(3) {{ width: 20%; }} /* Name */
+            th:nth-child(4) {{ width: 25%; }} /* Details */
+            th:nth-child(5) {{ width: 10%; }} /* Cost */
+            th:nth-child(6) {{ width: 17%; }} /* Reason */
             </style></head>
             <body>
             <h1>🧟 Skywalker Zombie Hunter Report</h1>
