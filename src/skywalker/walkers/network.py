@@ -105,6 +105,7 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
                         region=region.split("/")[-1],
                         status=str(addr.status),
                         user=addr.users[0].split("/")[-1] if addr.users else None,
+                        address_type=str(addr.address_type),
                     )
                 )
     except Exception as e:

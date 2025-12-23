@@ -63,7 +63,12 @@ class ZombieHunter:
         try:
             report = network.get_network_report(project_id)
             for addr in report.addresses:
-                if addr.status == "RESERVED" and not addr.user:
+                # Only care about EXTERNAL IPs costing money
+                if (
+                    addr.status == "RESERVED"
+                    and not addr.user
+                    and addr.address_type == "EXTERNAL"
+                ):
                     self.zombies.append(
                         ZombieResource(
                             resource_type="Static IP",
@@ -71,7 +76,7 @@ class ZombieHunter:
                             name=addr.name,
                             details=addr.address,
                             monthly_cost_est=7.30,
-                            reason="Reserved but not in use",
+                            reason="Reserved External IP not in use",
                         )
                     )
         except Exception as e:
