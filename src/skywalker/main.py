@@ -130,6 +130,7 @@ Examples:
 
     # Use stderr for logs/progress if stdout is piped for JSON
     log_console = Console(stderr=True, quiet=args.json)
+    out_console = Console(quiet=args.json)
 
     log_console.print(
         "[bold green]Skywalker[/bold green] Ursa Major Auditor initialized."
