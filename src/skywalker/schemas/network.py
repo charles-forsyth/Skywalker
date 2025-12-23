@@ -31,6 +31,7 @@ class GCPAddress(BaseModel):
     region: str
     status: str = Field(description="IN_USE or RESERVED")
     user: str | None = None
+    address_type: str = Field(default="UNKNOWN", description="EXTERNAL or INTERNAL")
 
 
 class GCPNetworkReport(BaseModel):
