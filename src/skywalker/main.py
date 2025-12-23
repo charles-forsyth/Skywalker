@@ -5,7 +5,7 @@ from rich.console import Console
 
 from .core import STANDARD_REGIONS
 from .logger import logger
-from .modes import audit, fix, monitor
+from .modes import audit, fix, monitor, zombies
 
 
 def main() -> None:
@@ -47,6 +47,11 @@ Examples:
         "--monitor",
         action="store_true",
         help="Enter Fleet Performance Monitoring Mode",
+    )
+    group.add_argument(
+        "--find-zombies",
+        action="store_true",
+        help="Enter Zombie Hunter Mode (find unused/wasteful resources)",
     )
 
     parser.add_argument(
@@ -122,13 +127,13 @@ Examples:
     args = parser.parse_args()
 
     # Must validate required args manually since group is now optional for --version
-    if not any([args.project_id, args.all_projects, args.monitor]):
+    if not any([args.project_id, args.all_projects, args.monitor, args.fix, args.find_zombies]):
         # Special case: allow --fix without the group if it handles its own scope
         # but for ops-agent it needs --monitor or --project-id
         if not args.fix:
             parser.error(
                 "one of the arguments --project-id --all-projects "
-                "--monitor is required"
+                "--monitor --find-zombies is required"
             )
 
     # Configure Logger Level
@@ -158,6 +163,12 @@ Examples:
             monitor.run_fleet_monitor(args, log_console, out_console)
         except Exception as e:
             logger.error(f"Fleet Monitor Failed: {escape(str(e))}")
+            exit(1)
+    elif args.find_zombies:
+        try:
+            zombies.run_zombie_hunt(args, log_console, out_console)
+        except Exception as e:
+            logger.error(f"Zombie Hunt Failed: {escape(str(e))}")
             exit(1)
     else:
         # Audit Mode
