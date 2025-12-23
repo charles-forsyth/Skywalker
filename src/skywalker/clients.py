@@ -13,7 +13,7 @@ from google.cloud import (
     notebooks_v1,
     resourcemanager_v3,
     run_v2,
-    storage,  # type: ignore[attr-defined]
+    storage,  # type: ignore
 )
 
 # Shared Client Registry (Lazy-loaded and cached)
