@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -25,7 +26,8 @@ def _install_agent(instance: dict[str, Any]) -> str:
         return f"[yellow]Skipping {name}: GKE Node (COS not supported)[/yellow]"
 
     cmd_str = (
-        "curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh && "
+        "curl -sSO https://dl.google.com/cloudagents/"
+        "add-google-cloud-ops-agent-repo.sh && "
         "sudo bash add-google-cloud-ops-agent-repo.sh --also-install"
     )
 
@@ -48,9 +50,8 @@ def _install_agent(instance: dict[str, Any]) -> str:
         res = subprocess.run(ssh_cmd, capture_output=True, text=True)
         if res.returncode == 0:
             return f"[green]SUCCESS: {name}[/green]"
-        else:
-            err = res.stderr.strip().splitlines()[-1] if res.stderr else "Unknown error"
-            return f"[red]FAILED: {name} - {err}[/red]"
+        err = res.stderr.strip().splitlines()[-1] if res.stderr else "Unknown error"
+        return f"[red]FAILED: {name} - {err}[/red]"
     except Exception as e:
         return f"[red]ERROR: {name} - {e}[/red]"
 
@@ -64,7 +65,7 @@ def _fix_ops_agent(args: argparse.Namespace, console: Console) -> None:
     # 1. Discovery
     console.print("Scanning fleet for missing agents...")
     scoping_proj = args.scoping_project or "ucr-research-computing"
-    
+
     try:
         metrics = monitoring.fetch_fleet_metrics(scoping_proj)
     except Exception as e:
@@ -74,28 +75,16 @@ def _fix_ops_agent(args: argparse.Namespace, console: Console) -> None:
     # 2. Filter Candidates
     # Criteria: Running (CPU > 0), Missing Memory (mem is None/NaN), Not GKE
     candidates = []
-    for m in metrics:
-        cpu = m.get("cpu_percent", 0)
-        mem = m.get("memory_percent")
-        name = m.get("instance_id") # Note: Monitor mode returns ID in 'instance_id', name is added later via assets? 
-        # Wait, fetch_fleet_metrics returns raw metrics. 'instance_name' is added in main.py by Asset walker.
-        # We need NAMES to SSH.
-        # So we MUST run Asset Enrichment here too!
-        
-        # Checking logic from main.py...
-        pass
-    
+
     # REFACTOR: We need the asset enrichment logic here.
     # It's better to import the enrichment logic or re-implement it briefly.
-    # Let's verify we have project_id and zone.
-    # fetch_fleet_metrics returns: project_id, instance_id, zone, cpu_percent...
-    
+
     # We need to resolve names.
     from ..walkers import asset
-    
+
     projects_to_scan = {m.get("project_id") for m in metrics if m.get("project_id")}
     console.print(f"Resolving names for {len(projects_to_scan)} projects...")
-    
+
     assets = {}
     with ThreadPoolExecutor(max_workers=20) as executor:
         futures = {
@@ -103,36 +92,36 @@ def _fix_ops_agent(args: argparse.Namespace, console: Console) -> None:
             for pid in projects_to_scan
         }
         for future in as_completed(futures):
-            try:
+            with contextlib.suppress(Exception):
                 assets.update(future.result())
-            except Exception:
-                pass
 
     # Now filter
     for m in metrics:
         iid = str(m.get("instance_id", ""))
         cpu = m.get("cpu_percent", 0)
         mem = m.get("memory_percent")
-        
+
         if iid in assets:
             m["instance_name"] = assets[iid]["name"]
             m["machine_type"] = assets[iid]["machine_type"]
         else:
             m["instance_name"] = "unknown"
-        
+
         name = m.get("instance_name", "unknown")
-        
+
         # Logic: CPU active (>0.1%), Memory MISSING, Name known, Not GKE
         if (
-            cpu > 0.1 
-            and mem is None 
-            and name != "unknown" 
+            cpu > 0.1
+            and mem is None
+            and name != "unknown"
             and not name.startswith("gke-")
         ):
             candidates.append(m)
 
     if not candidates:
-        console.print("[green]No candidates found! All eligible VMs have Ops Agent.[/green]")
+        console.print(
+            "[green]No candidates found! All eligible VMs have Ops Agent.[/green]"
+        )
         return
 
     # 3. Present List
@@ -141,17 +130,17 @@ def _fix_ops_agent(args: argparse.Namespace, console: Console) -> None:
     table.add_column("Name", style="green")
     table.add_column("Zone")
     table.add_column("CPU %")
-    
+
     for c in candidates:
         table.add_row(
             c.get("project_id"),
             c.get("instance_name"),
             c.get("zone"),
-            f"{c.get('cpu_percent', 0):.1f}%"
+            f"{c.get('cpu_percent', 0):.1f}%",
         )
-    
+
     console.print(table)
-    
+
     # 4. Confirm
     if not Confirm.ask(f"Install Ops Agent on these {len(candidates)} instances?"):
         console.print("[yellow]Aborted.[/yellow]")
@@ -161,11 +150,13 @@ def _fix_ops_agent(args: argparse.Namespace, console: Console) -> None:
     console.print("Launching installers (this may take a minute)...")
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(_install_agent, c) for c in candidates]
-        for future in as_completed(futures):
+        for future in as_completed(futures):  # type: ignore[arg-type]
             console.print(future.result())
 
 
-def run_fix(args: argparse.Namespace, log_console: Console, out_console: Console) -> None:
+def run_fix(
+    args: argparse.Namespace, _log_console: Console, out_console: Console
+) -> None:
     """Dispatcher for fix commands."""
     if args.fix == "ops-agent":
         _fix_ops_agent(args, out_console)
