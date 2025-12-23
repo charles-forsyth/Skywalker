@@ -109,3 +109,99 @@ def fetch_fleet_metrics(scoping_project_id: str) -> list[dict[str, Any]]:
             logger.error(f"Unexpected error in metric fetch {label}: {e}")
 
     return list(fleet_data.values())
+
+
+def fetch_inactive_resources(
+    project_id: str,
+    metric_type: str,
+    resource_type: str,
+    days: int = 30,
+    group_by: list[str] | None = None,
+) -> dict[str, float]:
+    """
+    Fetches the SUM of a metric over a long period to detect inactivity.
+    Returns: {resource_name: total_value}
+
+    If total_value == 0, the resource is inactive (Zombie).
+    """
+    client = get_monitoring_client()
+    name = f"projects/{project_id}"
+
+    now = time.time()
+    seconds = int(now)
+    start_seconds = seconds - (days * 86400)
+
+    interval = monitoring_v3.TimeInterval(
+        {
+            "end_time": {"seconds": seconds, "nanos": 0},
+            "start_time": {"seconds": start_seconds, "nanos": 0},
+        }
+    )
+
+    filter_str = f'metric.type = "{metric_type}" AND resource.type = "{resource_type}"'
+
+    # Aggregation: Align by summing over the entire period
+    # Note: 30 days is a huge window. We must use a large alignment period.
+    alignment_period = {"seconds": days * 86400}
+
+    if not group_by:
+        # Default grouping depends on resource type usually, but we need
+        # the resource identifier labels.
+        # For buckets: resource.label.bucket_name
+        # For SQL: resource.label.database_id
+        # For Filestore: resource.label.instance_id
+        pass
+
+    aggregation = monitoring_v3.Aggregation(
+        {
+            "alignment_period": alignment_period,
+            "per_series_aligner": monitoring_v3.Aggregation.Aligner.ALIGN_SUM,
+            "cross_series_reducer": monitoring_v3.Aggregation.Reducer.REDUCE_SUM,
+            "group_by_fields": group_by,
+        }
+    )
+
+    results = {}
+    try:
+        pages = client.list_time_series(
+            request={
+                "name": name,
+                "filter": filter_str,
+                "interval": interval,
+                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+                "aggregation": aggregation,
+            }
+        )
+        for ts in pages:
+            # Identifier logic depends on what we grouped by
+            # Usually the first label in the group_by list is the key
+            if not ts.points:
+                continue
+
+            val = ts.points[0].value.double_value or float(
+                ts.points[0].value.int64_value
+            )
+
+            # Key construction
+            # If we grouped by ["resource.label.bucket_name"],
+            # we check ts.resource.labels["bucket_name"]
+            # But the Aggregation API puts grouped labels in metric/resource labels.
+
+            # Helper to find the key
+            key = "unknown"
+            if group_by:
+                # Try to find the value of the first grouping field in labels
+                field = group_by[0]
+                label_key = field.split(".")[-1]
+                key = (
+                    ts.resource.labels.get(label_key)
+                    or ts.metric.labels.get(label_key)
+                    or "unknown"
+                )
+
+            results[key] = val
+
+    except Exception as e:
+        logger.debug(f"Failed to fetch inactivity metric {metric_type}: {e}")
+
+    return results
