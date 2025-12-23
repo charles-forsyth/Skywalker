@@ -1,138 +1,101 @@
-# Skywalker 🚀
+# Skywalker
 
-**GCP Ursa Major Audit Tool for UCR Research Computing**
+**Skywalker** is the official GCP Audit & Reporting Tool for **UCR Research Computing**. It provides deep visibility into the "Ursa Major" research fleet, helping administrators detect security risks, optimize costs, and maintain operational hygiene across hundreds of Google Cloud projects.
 
-Skywalker is a high-performance CLI tool designed to "walk" the Google Cloud Platform (GCP) hierarchy to audit resources, validate security compliance (Ursa Major standards), and generate professional reports.
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-Production-orange)
 
-## Features
+## 🚀 Key Capabilities
 
-- **Ursa Major Auditor:** Automatically discovers and audits ALL active projects in your organization/folder.
-- **Deep Inspection:** 
-    - **Compute Engine:** VMs, Disks, GPUs, IPs.
-    - **Cloud Storage:** Bucket sizes (via Monitoring), Public Access Prevention (PAP).
-    - **Cloud Run:** Serverless services and revisions.
-    - **GKE:** Clusters and Node Pools.
-    - **Cloud SQL:** Database instances, versions, and public IP exposure.
-    - **Vertex AI:** Notebooks, Models, and Endpoints.
-    - **IAM:** Service Accounts, Keys, and High-Privilege Role analysis.
-    - **Network:** Firewall rules (flagging `0.0.0.0/0`) and Static IPs.
-- **Parallel Execution:** 
-    - Scans multiple projects concurrently.
-    - Scans multiple regions concurrently within each project.
-- **Reporting:** 
-    - **Console:** Rich, color-coded terminal output.
-    - **JSON:** Pipeable, structured data for all projects.
-    - **PDF/HTML:** Professional compliance reports with executive summaries.
+### 1. 🔍 Deep Audit
+Scans a specific project or the entire organization for resources across **9 GCP Services**:
+*   **Compute Engine:** VMs, Disks, Images, Snapshots (with GPU & Utilization metrics).
+*   **Storage:** Buckets, Sizes, Public Access Prevention status.
+*   **IAM:** Service Accounts, Keys, and Privileged Roles (Owner/Editor/Viewer).
+*   **Network:** Firewalls (Open Ports), Static IPs, VPCs.
+*   **Kubernetes (GKE):** Clusters, Node Pools, Versions.
+*   **Cloud Run:** Services, Images, Last Modifiers.
+*   **Cloud SQL & Filestore:** Databases and NFS shares.
+*   **Vertex AI:** Notebooks and Endpoints.
 
-## Prerequisites
+### 2. 📊 Fleet Performance Monitoring
+Aggregates real-time metrics (CPU, Memory, GPU) from hundreds of VMs into a single "Mission Control" dashboard.
+*   Identifies "noisy neighbors" and overloaded instances.
+*   Detects "Blind Spots" (VMs missing the Ops Agent).
 
-### 1. Authentication
-Skywalker uses Google Cloud Application Default Credentials (ADC).
+### 3. 🧟 Zombie Hunter
+**Finds and quantifies wasted spend.** Scans the entire organization for:
+*   **Orphaned Disks:** Unattached persistent disks silently charging monthly fees.
+*   **Unused Static IPs:** Reserved external IPs not attached to any resource.
+*   **Inactive Buckets:** GCS buckets with zero egress activity for 30 days.
+*   **Calculates ROI:** Estimates potential monthly savings (e.g., "$19,000/mo potential savings").
+
+### 4. 🛠️ Automated Remediation
+Interactive "Fix-It" mode to solve common fleet issues at scale.
+*   **Ops Agent Installer:** Mass-deploys the Google Cloud Ops Agent to Linux VMs via SSH (IAP Tunneling) to fix monitoring blind spots.
+
+## 📦 Installation
+
+Skywalker is packaged with `uv` for speed and isolation.
 
 ```bash
-gcloud auth login
-gcloud auth application-default login
+# Install tool globally
+uv tool install . --force
 ```
 
-### 2. PDF Rendering (Optional)
-If you intend to use `--report` (PDF), your system must have `pango` and `cairo` installed.
+## 🛠️ Usage
 
-**Ubuntu/Debian:**
+### Standard Audit
+Audit a single project for all services.
 ```bash
-sudo apt install libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0
-```
-
-**macOS:**
-```bash
-brew install pango
-```
-
-### 3. Usage
-
-#### 🔍 Basic Audit (Single Project)
-```bash
-# Basic scan (outputs to terminal)
 skywalker --project-id ucr-research-computing
-
-# Audit specific services only (e.g., just IAM and Storage)
-skywalker --project-id ucr-research-computing --services iam storage
-
-# Audit all services (explicitly)
-skywalker --project-id ucr-research-computing --services all
 ```
 
-#### 🚀 Ursa Major Audit (Multi-Project)
-Automatically discover and scan all active projects you have access to.
-
+Audit specific services in specific regions.
 ```bash
-# Scan fleet and generate full HTML report
-skywalker --all-projects --html compliance_report.html
-
-# Scan fleet with high concurrency (faster for large orgs)
-skywalker --all-projects --concurrency 20 --html fast_scan.html
+skywalker --project-id my-lab-project --services compute storage --regions us-west1
 ```
 
-#### 📄 Output Formats
-Combine audit commands with output flags to generate artifacts.
-
+### Zombie Hunting 🧟
+Find wasted resources across ALL projects in the org.
 ```bash
-# Generate a PDF report
-skywalker --project-id ucr-research-computing --report audit.pdf
-
-# Generate an HTML report
-skywalker --project-id ucr-research-computing --html report.html
-
-# Output raw JSON data (for piping to jq or saving)
-skywalker --project-id ucr-research-computing --json > audit.json
+skywalker --find-zombies
 ```
 
-#### ⚙️ Advanced Options
-
-**Region Selection:**
-Scan specific regions instead of the default US set.
+### Fleet Monitoring
+View a live dashboard of top CPU/Memory consumers.
 ```bash
-skywalker --project-id ucr-research-computing --regions us-west1 us-east1
+skywalker --monitor --limit 20
 ```
 
-**Cache Control:**
-Force a fresh scan by ignoring/clearing the local cache.
+### Remediation (Fix-It)
+Install Ops Agent on all VMs in the monitoring scope that are missing it.
 ```bash
-skywalker --project-id ucr-research-computing --no-cache
+skywalker --fix ops-agent --monitor
 ```
 
-**Version Check:**
+### Reporting
+Generate a PDF or HTML report for stakeholders.
 ```bash
-skywalker --version
+skywalker --all-projects --html fleet_report.html
 ```
 
-## Options
+## 🏗️ Architecture
 
-| Flag | Description |
-| :--- | :--- |
-| `--project-id <ID>` | Target a single GCP project ID. |
-| `--all-projects` | Discover and scan all active projects in the organization. |
-| `--services <LIST>` | Specific services to audit: `compute`, `storage`, `gke`, `run`, `sql`, `iam`, `vertex`, `network`, or `all`. |
-| `--regions <LIST>` | Regions to scan (default: `us-central1`, `us-west1`, `us-east1`, `us-east4`, `us-west2`, `us-west4`). |
-| `--concurrency <N>` | Number of concurrent projects to scan (default: 5). |
-| `--report <FILE>` | Generate a PDF report (requires `pango`/`cairo`). |
-| `--html <FILE>` | Generate an HTML report. |
-| `--json` | Output raw JSON to stdout (suppresses logs). |
-| `--no-cache` | Disable and clear local cache for this run. |
-| `--version` | Show the tool version. |
+*   **Language:** Python 3.12+
+*   **Core:** `google-cloud-sdk` (Official Python Clients).
+*   **Concurrency:** `ThreadPoolExecutor` for high-speed parallel scanning of 100+ projects.
+*   **Design:** Modular "Walkers" for each service, centralized client management, and strict Pydantic schemas.
+*   **Safety:** Read-only by default (except `--fix`). Interactive confirmation required for changes.
 
-## Development
+## 🤝 Contributing
 
-```bash
-# Clone the repo
-git clone https://github.com/charles-forsyth/Skywalker.git
-cd Skywalker
-
-# Install development environment
-uv sync --extra dev --extra test
-
-# Run tests
-uv run pytest
-```
+1.  Create a feature branch (`feat/new-thing`).
+2.  Write tests (`pytest`).
+3.  Ensure typing passes (`mypy src`).
+4.  Format code (`ruff format .`).
+5.  Submit a PR.
 
 ---
-*Maintained by Charles Forsyth / UCR Research Computing*
+*Maintained by Charles Forsyth (UCR Research Computing)*

@@ -2,15 +2,15 @@
 
 ## Project Overview
 
-**Skywalker** is a Python-based CLI tool designed for **GCP Audit & Reporting** within UCR Research Computing (specifically for 'Ursa Major' compliance). Its primary function is to "walk" the Google Cloud hierarchy, validate resources against compliance schemas, and generate reports.
+**Skywalker** is a Python-based CLI tool designed for **GCP Audit, Reporting, & Remediation** within UCR Research Computing (specifically for 'Ursa Major' compliance). Its primary function is to "walk" the Google Cloud hierarchy, validate resources against compliance schemas, find wasted spend ("Zombies"), and remediate configuration drift.
 
 ### Key Technologies
-*   **Language:** Python 3.10+
+*   **Language:** Python 3.12+
 *   **Packaging:** `uv` (Astral) with `hatchling` backend.
 *   **CLI UX:** `rich` for formatting, `argparse` for commands.
-*   **Cloud API:** `google-cloud-sdk` (Compute, Storage, Resource Manager).
+*   **Cloud API:** `google-cloud-sdk` (Compute, Storage, Monitoring, Asset, etc.).
 *   **Resilience:** `tenacity` for retries.
-*   **Caching:** `joblib` for local development speed.
+*   **Architecture:** Centralized `ClientFactory` (`clients.py`) and Modular Modes (`audit`, `monitor`, `fix`, `zombies`).
 *   **Validation:** `pydantic` strict models.
 *   **Quality:** `ruff` (linting/formatting), `mypy` (strict static typing), `pytest` (testing).
 
@@ -18,82 +18,53 @@
 
 ```text
 skywalker/
-├── pyproject.toml       # Project configuration, dependencies, tools (ruff, mypy)
-├── uv.lock              # Lock file for reproducible builds
+├── pyproject.toml       # Dependencies (google-cloud-*, rich, tenacity, weasyprint)
+├── uv.lock              # Lock file
 ├── README.md
 ├── src/
 │   └── skywalker/
 │       ├── __init__.py
-│       ├── main.py      # CLI Entry point
-│       ├── models.py    # Pydantic data schemas
-│       └── walker.py    # Core logic (GCP API calls, caching, retries)
+│       ├── main.py      # CLI Entry Point & Dispatcher
+│       ├── clients.py   # Centralized GCP Client Factory (LRU Cached)
+│       ├── logger.py    # Rich Logger Configuration
+│       ├── modes/
+│       │   ├── audit.py    # Audit Mode Logic
+│       │   ├── monitor.py  # Fleet Performance Mode
+│       │   ├── fix.py      # Remediation Mode (Ops Agent)
+│       │   └── zombies.py  # Zombie Hunter Mode (Cost Optimization)
+│       ├── schemas/     # Pydantic Models (compute, storage, etc.)
+│       └── walkers/     # API Interaction Logic (compute.py, network.py, etc.)
 ├── tests/
-│   ├── __init__.py
-│   └── test_walker.py   # Unit tests with mocks
+│   └── ...              # Pytest suite
 └── .github/
     └── workflows/
         └── test.yml     # CI/CD: Lint, Type-Check, Test
 ```
 
-## Development & Usage
-
-### Installation
-
-This project is optimized for `uv`.
-
-```bash
-# Install tool globally
-uv tool install .
-
-# Install dependencies in a venv for development
-uv sync --extra dev --extra test
-```
-
-### Running the Tool
-
-```bash
-# Run via uv (dev mode)
-uv run skywalker --project-id <PROJECT_ID> --zone <ZONE>
-
-# Run installed tool
-skywalker --project-id ucr-research-computing --zone us-central1-a
-```
-
-### Testing & Quality Assurance
-
-All features **must** pass these checks before merging.
-
-```bash
-# Run Unit Tests
-uv run --extra test pytest
-
-# Run Linter (Ruff)
-uv run --extra dev ruff check .
-
-# Run Formatter (Ruff)
-uv run --extra dev ruff format .
-
-# Run Type Checker (Mypy)
-uv run --extra dev mypy src
-```
-
 ## Operational Rules (Memory Bank)
 
 1.  **Workflow:** Always use **Feature Branches** -> **Pull Requests** -> **Merge**. Never commit to `master` directly.
-2.  **Versioning:** Every functional code change requires a version bump in `pyproject.toml` to ensure `uv tool update` works for users.
+2.  **Versioning:** Every functional code change requires a version bump in `pyproject.toml`.
 3.  **Code Quality:**
     *   No placeholders. Write complete code.
-    *   Strict typing is enforced (`mypy strict`).
-    *   All imports must be sorted (`ruff check --fix`).
+    *   Strict typing (`mypy strict`).
+    *   All imports must be sorted (`ruff check --select I`).
 4.  **Testing:**
     *   Use `pytest-mock` to mock GCP API calls.
-    *   Use the `clear_cache` fixture (in `tests/test_walker.py` or `conftest.py`) to prevent `joblib` from interfering with tests.
+    *   Mock `subprocess.run` for remediation tests.
 5.  **Safety:**
-    *   Never output secrets.
-    *   Read-only operations by default unless explicitly authorized.
+    *   **Remediation:** Must be interactive (`Confirm.ask`) and scoped.
+    *   **Secrets:** Never output secrets.
+6.  **Performance:**
+    *   Use `ThreadPoolExecutor` for multi-project scans.
+    *   **No Caching:** `joblib` has been removed. Always fetch fresh data.
 
-## Current State (as of Dec 18, 2025)
+## Current State (as of Dec 23, 2025)
 
-*   **Version:** 0.1.0
-*   **Capabilities:** Can list Compute Instances in a specific zone.
-*   **Next Steps:** Refactoring to a Modular Architecture (Compute, Storage, GKE, etc.) and implementing Deep Compute inspection.
+*   **Version:** 0.32.0
+*   **Capabilities:**
+    *   **Audit:** Scans 9+ services across 150+ projects.
+    *   **Monitor:** Real-time fleet dashboard (CPU/Mem/GPU).
+    *   **Zombie Hunter:** Finds Orphaned Disks, Unused IPs, Inactive Buckets.
+    *   **Fix-It:** Auto-installs Ops Agent via SSH/IAP.
+*   **Architecture:** Fully modularized `main.py` and centralized clients.
