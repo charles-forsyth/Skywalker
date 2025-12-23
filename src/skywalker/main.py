@@ -127,14 +127,22 @@ Examples:
     args = parser.parse_args()
 
     # Must validate required args manually since group is now optional for --version
-    if not any([args.project_id, args.all_projects, args.monitor, args.fix, args.find_zombies]):
-        # Special case: allow --fix without the group if it handles its own scope
-        # but for ops-agent it needs --monitor or --project-id
-        if not args.fix:
-            parser.error(
-                "one of the arguments --project-id --all-projects "
-                "--monitor --find-zombies is required"
-            )
+    if (
+        not any(
+            [
+                args.project_id,
+                args.all_projects,
+                args.monitor,
+                args.fix,
+                args.find_zombies,
+            ]
+        )
+        and not args.fix
+    ):
+        parser.error(
+            "one of the arguments --project-id --all-projects "
+            "--monitor --find-zombies is required"
+        )
 
     # Configure Logger Level
     if args.verbose:

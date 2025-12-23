@@ -1,13 +1,14 @@
-from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, List
+from dataclasses import dataclass
+from typing import Any
 
 from rich.console import Console
 from rich.table import Table
 
 from ..clients import get_disks_client
-from ..walkers import network, monitoring, storage
 from ..logger import logger
+from ..walkers import monitoring, network, storage
+
 
 @dataclass
 class ZombieResource:
@@ -21,13 +22,13 @@ class ZombieResource:
 class ZombieHunter:
     def __init__(self, console: Console):
         self.console = console
-        self.zombies: List[ZombieResource] = []
+        self.zombies: list[ZombieResource] = []
 
     def hunt_disks(self, project_id: str) -> None:
         """Finds orphaned disks (not attached to any user)."""
         try:
             client = get_disks_client()
-            for zone, disks in client.aggregated_list(project=project_id):
+            for _zone, disks in client.aggregated_list(project=project_id):
                 if not disks.disks:
                     continue
                 for disk in disks.disks:

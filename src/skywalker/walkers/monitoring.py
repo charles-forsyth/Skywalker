@@ -179,22 +179,28 @@ def fetch_inactive_resources(
             # Usually the first label in the group_by list is the key
             if not ts.points:
                 continue
-                
-            val = ts.points[0].value.double_value or float(ts.points[0].value.int64_value)
-            
+
+            val = ts.points[0].value.double_value or float(
+                ts.points[0].value.int64_value
+            )
+
             # Key construction
-            # If we grouped by ["resource.label.bucket_name"], 
+            # If we grouped by ["resource.label.bucket_name"],
             # we check ts.resource.labels["bucket_name"]
-            # But the Aggregation API puts grouped labels in metric/resource labels of the output.
-            
+            # But the Aggregation API puts grouped labels in metric/resource labels.
+
             # Helper to find the key
             key = "unknown"
             if group_by:
                 # Try to find the value of the first grouping field in labels
                 field = group_by[0]
                 label_key = field.split(".")[-1]
-                key = ts.resource.labels.get(label_key) or ts.metric.labels.get(label_key) or "unknown"
-            
+                key = (
+                    ts.resource.labels.get(label_key)
+                    or ts.metric.labels.get(label_key)
+                    or "unknown"
+                )
+
             results[key] = val
             
     except Exception as e:
