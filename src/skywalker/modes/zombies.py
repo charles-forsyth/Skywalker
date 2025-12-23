@@ -1,7 +1,12 @@
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+import jinja2
+import pandas as pd
 from rich.console import Console
 from rich.table import Table
 
@@ -89,10 +94,7 @@ class ZombieHunter:
             if not buckets:
                 return
 
-            # Fetch activity (this is slow, so maybe skip for V1 or optimize)
-            # For V1, let's just list empty buckets? No, empty buckets cost $0.
-            # We want FULL buckets that are idle.
-            # Let's verify Monitoring API access first.
+            # Fetch activity
             activity = monitoring.fetch_inactive_resources(
                 project_id,
                 metric_type="storage.googleapis.com/network/sent_bytes_count",
@@ -145,7 +147,6 @@ def run_zombie_hunt(args: Any, log_console: Console, out_console: Console) -> No
         for pid in projects:
             futures.append(executor.submit(hunter.hunt_disks, pid))
             futures.append(executor.submit(hunter.hunt_ips, pid))
-            # Including buckets in the hunt
             futures.append(executor.submit(hunter.hunt_buckets, pid))
 
         for future in as_completed(futures):
@@ -156,30 +157,106 @@ def run_zombie_hunt(args: Any, log_console: Console, out_console: Console) -> No
 
     # 3. Report
     if not hunter.zombies:
-        out_console.print("[green]No Zombies Found! Fleet is clean.[/green]")
+        if not args.json:
+            out_console.print("[green]No Zombies Found! Fleet is clean.[/green]")
+        else:
+            print("[]")
         return
 
     # Sort by cost desc
     hunter.zombies.sort(key=lambda z: z.monthly_cost_est, reverse=True)
-
     total_waste = sum(z.monthly_cost_est for z in hunter.zombies)
 
-    table = Table(title=f"🧟 Zombie Report (Est. Waste: ${total_waste:.2f}/mo) 🧟")
-    table.add_column("Type", style="cyan")
-    table.add_column("Project")
-    table.add_column("Name", style="red")
-    table.add_column("Details")
-    table.add_column("Est. Cost/Mo", justify="right")
-    table.add_column("Reason", style="dim")
+    # Prepare data for non-terminal outputs
+    zombie_dicts = [asdict(z) for z in hunter.zombies]
+    df = pd.DataFrame(zombie_dicts)
 
-    for z in hunter.zombies:
-        table.add_row(
-            z.resource_type,
-            z.project_id,
-            z.name,
-            z.details,
-            f"${z.monthly_cost_est:.2f}",
-            z.reason,
-        )
+    # Console Output (Table)
+    if not args.json:
+        table = Table(title=f"🧟 Zombie Report (Est. Waste: ${total_waste:.2f}/mo) 🧟")
+        table.add_column("Type", style="cyan")
+        table.add_column("Project")
+        table.add_column("Name", style="red")
+        table.add_column("Details")
+        table.add_column("Est. Cost/Mo", justify="right")
+        table.add_column("Reason", style="dim")
 
-    out_console.print(table)
+        for z in hunter.zombies:
+            table.add_row(
+                z.resource_type,
+                z.project_id,
+                z.name,
+                z.details,
+                f"${z.monthly_cost_est:.2f}",
+                z.reason,
+            )
+        out_console.print(table)
+
+    # JSON Output
+    if args.json:
+        print(json.dumps(zombie_dicts, indent=2))
+
+    # CSV Output
+    if args.csv:
+        df.to_csv(args.csv, index=False)
+        log_console.print(f"Zombie data saved to [bold]{args.csv}[/bold]")
+
+    # HTML/PDF Report (reuse or generate)
+    if args.html or args.report:
+        log_console.print("\n[bold]Generating Zombie Hunter reports...[/bold]")
+        try:
+            template_dir = Path(__file__).parent.parent / "templates"
+            env = jinja2.Environment(
+                loader=jinja2.FileSystemLoader(str(template_dir)),
+                autoescape=jinja2.select_autoescape(["html", "xml"]),
+            )
+            
+            # For now, we'll assume a basic report template or generate a simple one
+            # If report.html doesn't support zombies, we should create a specific one.
+            # I'll create a simple one here for the prototype.
+            
+            # Attempt to use specific zombie template if it exists
+            template_name = "report.html" # Fallback
+            
+            html_content = ""
+            # Simple inline HTML if template is complex to adapt
+            html_content = f"""
+            <html>
+            <head><title>Zombie Hunter Report</title><style>
+            table {{ border-collapse: collapse; width: 100%; font-family: sans-serif; }}
+            th, td {{ text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }}
+            tr:nth-child(even) {{ background-color: #f2f2f2; }}
+            th {{ background-color: #f44336; color: white; }}
+            .summary {{ background: #eee; padding: 20px; margin-bottom: 20px; }}
+            </style></head>
+            <body>
+            <h1>🧟 Skywalker Zombie Hunter Report</h1>
+            <div class="summary">
+                <p><strong>Scan Time:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p><strong>Total Zombies Found:</strong> {len(hunter.zombies)}</p>
+                <p><strong>Total Estimated Waste:</strong> ${total_waste:.2f}/month</p>
+            </div>
+            <table>
+                <tr><th>Type</th><th>Project</th><th>Name</th><th>Details</th><th>Est. Cost/Mo</th><th>Reason</th></tr>
+            """
+            for z in hunter.zombies:
+                html_content += f"<tr><td>{z.resource_type}</td><td>{z.project_id}</td><td>{z.name}</td><td>{z.details}</td><td>${z.monthly_cost_est:.2f}</td><td>{z.reason}</td></tr>"
+            
+            html_content += "</table></body></html>"
+
+            if args.html:
+                with Path(args.html).open("w") as f:
+                    f.write(html_content)
+                log_console.print(f"HTML Report saved to [bold]{args.html}[/bold]")
+            
+            if args.report:
+                # Use weasyprint if available for PDF
+                try:
+                    from weasyprint import HTML
+                    HTML(string=html_content).write_pdf(args.report)
+                    log_console.print(f"PDF Report saved to [bold]{args.report}[/bold]")
+                except ImportError:
+                    log_console.print("[red]PDF Generation requires 'weasyprint'. Skipping PDF.[/red]")
+        
+        except Exception as e:
+            log_console.print(f"[bold red]Failed to generate report:[/bold red] {e}")
