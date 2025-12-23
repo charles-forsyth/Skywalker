@@ -421,9 +421,10 @@ def print_project_detailed(
             if binding.role in interesting_roles:
                 role_name = binding.role.split("/")[-1].upper()
                 # Only show Viewers if they are Users (to avoid noise)
-                if binding.role == "roles/viewer" and not binding.categorized_members[
-                    "users"
-                ]:
+                if (
+                    binding.role == "roles/viewer"
+                    and not binding.categorized_members["users"]
+                ):
                     continue
 
                 if binding.categorized_members["users"]:
@@ -434,9 +435,10 @@ def print_project_detailed(
                         console.print(f" - [blue]User[/blue]: {user}{name_str}")
 
                 # Show SAs for Owner/Editor
-                if binding.role != "roles/viewer" and binding.categorized_members[
-                    "service_accounts"
-                ]:
+                if (
+                    binding.role != "roles/viewer"
+                    and binding.categorized_members["service_accounts"]
+                ):
                     for sa in binding.categorized_members["service_accounts"]:
                         console.print(f" - [magenta]ServiceAccount[/magenta]: {sa}")
 

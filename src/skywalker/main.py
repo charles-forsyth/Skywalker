@@ -119,13 +119,13 @@ Examples:
     # Must validate required args manually since group is now optional for --version
     if not any([args.project_id, args.all_projects, args.monitor]):
         parser.error(
-            "one of the arguments --project-id --all-projects "
-            "--monitor is required"
+            "one of the arguments --project-id --all-projects --monitor is required"
         )
 
     # Configure Logger Level
     if args.verbose:
         import logging
+
         logger.setLevel(logging.WARNING)
 
     # Use stderr for logs/progress if stdout is piped for JSON

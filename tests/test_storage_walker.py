@@ -1,4 +1,3 @@
-
 from skywalker.walkers.storage import list_buckets
 
 
