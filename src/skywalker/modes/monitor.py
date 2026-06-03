@@ -1,5 +1,4 @@
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -38,32 +37,9 @@ def run_fleet_monitor(
             f"Fetching inventory for {len(projects_to_scan)} active projects..."
         )
 
-        assets = {}
-        # If org-id provided, try huge scan. Else iterate projects.
-        if args.org_id:
-            try:
-                assets = asset.search_all_instances(f"organizations/{args.org_id}")
-            except Exception:
-                log_console.print(
-                    "[yellow]Org-level search failed. "
-                    "Falling back to project iteration.[/yellow]"
-                )
-                # Fallback logic below...
-
-        if not assets:
-            with ThreadPoolExecutor(max_workers=20) as executor:
-                # Submit asset search for each project
-                futures = {
-                    executor.submit(asset.search_all_instances, f"projects/{pid}"): pid
-                    for pid in projects_to_scan
-                }
-
-                for future in as_completed(futures):
-                    try:
-                        project_assets = future.result()
-                        assets.update(project_assets)
-                    except Exception:
-                        pass  # Ignore failures for individual projects
+        # Resolve assets using the de-duplicated helper
+        projects_set = {str(pid) for pid in projects_to_scan if pid}
+        assets = asset.resolve_projects_assets(projects_set, args.org_id)
 
         # 3. Enrich Data
         enriched_data = []

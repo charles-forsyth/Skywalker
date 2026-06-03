@@ -1,3 +1,4 @@
+from googleapiclient.errors import HttpError
 from tenacity import retry
 
 from ..clients import get_sql_client
@@ -44,6 +45,10 @@ def list_instances(project_id: str) -> list[GCPSQLInstance]:
                     storage_limit_gb=int(settings.get("dataDiskSizeGb", 0)),
                 )
             )
+    except HttpError as e:
+        if e.resp.status in [429, 500, 503, 504]:
+            raise
+        logger.warning(f"Failed to list SQL instances for {project_id}: {e}")
     except Exception as e:
         logger.warning(f"Failed to list SQL instances for {project_id}: {e}")
 

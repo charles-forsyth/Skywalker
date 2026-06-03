@@ -99,6 +99,13 @@ def fetch_fleet_metrics(scoping_project_id: str) -> list[dict[str, Any]]:
                     else:
                         fleet_data[key][label] = val
 
+        except (
+            exceptions.ServiceUnavailable,
+            exceptions.InternalServerError,
+            exceptions.TooManyRequests,
+            exceptions.GatewayTimeout,
+        ):
+            raise
         except exceptions.PermissionDenied:
             logger.warning(
                 f"Permission denied fetching metric {label} from scope {name}"
@@ -111,6 +118,7 @@ def fetch_fleet_metrics(scoping_project_id: str) -> list[dict[str, Any]]:
     return list(fleet_data.values())
 
 
+@retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def fetch_inactive_resources(
     project_id: str,
     metric_type: str,
@@ -201,6 +209,13 @@ def fetch_inactive_resources(
 
             results[key] = val
 
+    except (
+        exceptions.ServiceUnavailable,
+        exceptions.InternalServerError,
+        exceptions.TooManyRequests,
+        exceptions.GatewayTimeout,
+    ):
+        raise
     except Exception as e:
         logger.debug(f"Failed to fetch inactivity metric {metric_type}: {e}")
 
