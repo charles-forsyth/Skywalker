@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from functools import lru_cache
 from typing import Any
 
@@ -17,6 +18,7 @@ from google.cloud import (
 )
 
 # Shared Client Registry (Lazy-loaded and cached)
+_thread_local = threading.local()
 
 
 @lru_cache(maxsize=1)
@@ -84,11 +86,14 @@ def get_gke_client() -> Any:
     return container_v1.ClusterManagerClient()
 
 
-@lru_cache(maxsize=1)
 def get_sql_client() -> Any:
-    from googleapiclient import discovery
+    if not hasattr(_thread_local, "sql_client"):
+        from googleapiclient import discovery
 
-    return discovery.build("sqladmin", "v1beta4", cache_discovery=False)
+        _thread_local.sql_client = discovery.build(
+            "sqladmin", "v1beta4", cache_discovery=False
+        )
+    return _thread_local.sql_client
 
 
 @lru_cache(maxsize=1)
@@ -116,8 +121,11 @@ def get_storage_client() -> Any:
     return google.cloud.storage.Client()
 
 
-@lru_cache(maxsize=1)
 def get_apikeys_client() -> Any:
-    from googleapiclient import discovery
+    if not hasattr(_thread_local, "apikeys_client"):
+        from googleapiclient import discovery
 
-    return discovery.build("apikeys", "v2", cache_discovery=False)
+        _thread_local.apikeys_client = discovery.build(
+            "apikeys", "v2", cache_discovery=False
+        )
+    return _thread_local.apikeys_client
