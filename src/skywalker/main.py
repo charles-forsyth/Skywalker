@@ -5,7 +5,7 @@ from rich.console import Console
 
 from .core import STANDARD_REGIONS
 from .logger import logger
-from .modes import audit, fix, monitor, zombies
+from .modes import apikeys, audit, fix, monitor, zombies
 
 
 def main() -> None:
@@ -53,6 +53,26 @@ Examples:
         "--find-zombies",
         action="store_true",
         help="Enter Zombie Hunter Mode (find unused/wasteful resources)",
+    )
+
+    parser.add_argument(
+        "--api-key-audit",
+        action="store_true",
+        help="Enter Deep API Key Audit and Cost Tracking Mode",
+    )
+
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=30,
+        help="Time range in days for usages and costs (default: 30)",
+    )
+
+    parser.add_argument(
+        "--sort-by",
+        default="keys_count",
+        choices=["project_id", "keys_count", "usage_count", "estimated_cost"],
+        help="Field to sort the table of all projects by (default: keys_count)",
     )
 
     parser.add_argument(
@@ -136,17 +156,22 @@ Examples:
                 args.monitor,
                 args.fix,
                 args.find_zombies,
+                args.api_key_audit,
             ]
         )
         and not args.fix
     ):
         parser.error(
             "one of the arguments --project-id --all-projects "
-            "--monitor --find-zombies is required"
+            "--monitor --find-zombies --api-key-audit is required"
         )
 
     # Zombie Hunter defaults to all projects if no specific project is provided
     if args.find_zombies and not args.project_id:
+        args.all_projects = True
+
+    # API Key Audit defaults to all projects if no specific project is provided
+    if args.api_key_audit and not args.project_id:
         args.all_projects = True
 
     # Configure Logger Level
@@ -183,6 +208,12 @@ Examples:
             zombies.run_zombie_hunt(args, log_console, out_console)
         except Exception as e:
             logger.error(f"Zombie Hunt Failed: {escape(str(e))}")
+            exit(1)
+    elif args.api_key_audit:
+        try:
+            apikeys.run_api_key_audit(args, log_console, out_console)
+        except Exception as e:
+            logger.error(f"API Key Audit Failed: {escape(str(e))}")
             exit(1)
     else:
         # Audit Mode
