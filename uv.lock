@@ -2064,7 +2064,7 @@ wheels = [
 
 [[package]]
 name = "skywalker"
-version = "0.33.4"
+version = "0.33.5"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },

@@ -232,3 +232,60 @@ def run_api_key_audit(
         )
 
         out_console.print(fleet_table)
+
+        # Render Detailed Fleet Tables for Keys and Usages if keys exist
+        if total_keys > 0:
+            out_console.print()
+            keys_table = Table(
+                title=f"All Discovered API Keys Across Fleet ({total_keys} keys found)",
+                show_header=True,
+                header_style="bold magenta",
+            )
+            keys_table.add_column("Project ID")
+            keys_table.add_column("Key Name (Display Name)")
+            keys_table.add_column("Masked Key")
+            keys_table.add_column("Security Status")
+            keys_table.add_column("Created At")
+
+            for r in all_reports:
+                for k in r.keys:
+                    status_str = (
+                        "[green]✓ Restricted[/green]"
+                        if k.is_restricted
+                        else "[bold red]⚠ UNRESTRICTED[/bold red]"
+                    )
+                    keys_table.add_row(
+                        r.project_id,
+                        k.display_name or "Unnamed Key",
+                        k.masked_key or "Unknown",
+                        status_str,
+                        k.created_at or "Unknown",
+                    )
+            out_console.print(keys_table)
+
+        # Check if there are any historical usages to display
+        has_usages = any(len(r.usages) > 0 for r in all_reports)
+        if has_usages:
+            out_console.print()
+            usage_table = Table(
+                title=f"API Key Usage & Estimated Cost Breakdown (Last {days} Days)",
+                show_header=True,
+                header_style="bold magenta",
+            )
+            usage_table.add_column("Project ID")
+            usage_table.add_column("API Key / Credential Reference")
+            usage_table.add_column("Google Cloud API Service")
+            usage_table.add_column("Request Count", justify="right")
+            usage_table.add_column("Est. Cost", justify="right")
+
+            for r in all_reports:
+                for cred_ref, records in r.usages.items():
+                    for u in records:
+                        usage_table.add_row(
+                            r.project_id,
+                            cred_ref,
+                            u.service,
+                            f"{u.request_count:,}",
+                            f"${u.estimated_cost:,.2f}",
+                        )
+            out_console.print(usage_table)
