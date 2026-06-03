@@ -114,3 +114,10 @@ def get_notebook_client() -> Any:
 @lru_cache(maxsize=1)
 def get_storage_client() -> Any:
     return google.cloud.storage.Client()
+
+
+@lru_cache(maxsize=1)
+def get_apikeys_client() -> Any:
+    from googleapiclient import discovery
+
+    return discovery.build("apikeys", "v2", cache_discovery=False)
