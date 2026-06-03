@@ -145,7 +145,7 @@ def _fetch_performance_metrics(
 @retry(**RETRY_CONFIG)  # type: ignore[call-overload, untyped-decorator]
 def _list_instances_inventory(project_id: str, zone: str) -> list[GCPComputeInstance]:
     """
-    Fetches raw inventory of instances. Cached.
+    Fetches raw inventory of instances. Live fetch.
     """
     instance_client = get_compute_instances_client()
     request = compute_v1.ListInstancesRequest(project=project_id, zone=zone)
@@ -212,9 +212,9 @@ def list_instances(
 ) -> list[GCPComputeInstance]:
     """
     Public API: Lists instances, optionally enriched with live metrics.
-    Inventory is cached; Metrics are NOT cached.
+    Inventory and metrics are fetched fresh.
     """
-    # 1. Get Inventory (Cached)
+    # 1. Get Inventory (Live fetch)
     instances = _list_instances_inventory(project_id, zone)
 
     # 2. Get Metrics (Live) and Merge

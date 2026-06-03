@@ -1,3 +1,4 @@
+import contextlib
 from typing import Any
 
 from google.api_core import exceptions
@@ -61,3 +62,34 @@ def search_all_instances(scope: str) -> dict[str, dict[str, Any]]:
         logger.error(f"Unexpected error searching assets in {scope}: {e}")
 
     return results
+
+
+def resolve_projects_assets(
+    project_ids: set[str], org_id: str | None = None
+) -> dict[str, dict[str, Any]]:
+    """
+    Resolves assets (GCE Instances) across a set of projects.
+    If org_id is provided, attempts an org-level asset inventory search first.
+    Falls back to concurrent project-by-project searches.
+    """
+    assets: dict[str, dict[str, Any]] = {}
+    if org_id:
+        try:
+            assets = search_all_instances(f"organizations/{org_id}")
+        except Exception:
+            logger.warning(
+                "Org-level asset search failed, falling back to project-level searches"
+            )
+
+    if not assets:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {
+                executor.submit(search_all_instances, f"projects/{pid}"): pid
+                for pid in project_ids
+            }
+            for future in as_completed(futures):
+                with contextlib.suppress(Exception):
+                    assets.update(future.result())
+    return assets

@@ -1,5 +1,4 @@
 import argparse
-import contextlib
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -10,7 +9,7 @@ from rich.prompt import Confirm
 from rich.table import Table
 
 from ..logger import logger
-from ..walkers import monitoring
+from ..walkers import asset, monitoring
 
 
 def _install_agent(instance: dict[str, Any]) -> str:
@@ -77,24 +76,10 @@ def _fix_ops_agent(args: argparse.Namespace, console: Console) -> None:
     # Criteria: Running (CPU > 0), Missing Memory (mem is None/NaN), Not GKE
     candidates = []
 
-    # REFACTOR: We need the asset enrichment logic here.
-    # It's better to import the enrichment logic or re-implement it briefly.
-
-    # We need to resolve names.
-    from ..walkers import asset
-
+    # Resolve names using the de-duplicated helper
     projects_to_scan = {m.get("project_id") for m in metrics if m.get("project_id")}
-    console.print(f"Resolving names for {len(projects_to_scan)} projects...")
-
-    assets = {}
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        futures = {
-            executor.submit(asset.search_all_instances, f"projects/{pid}"): pid
-            for pid in projects_to_scan
-        }
-        for future in as_completed(futures):
-            with contextlib.suppress(Exception):
-                assets.update(future.result())
+    projects_set = {str(pid) for pid in projects_to_scan if pid}
+    assets = asset.resolve_projects_assets(projects_set, getattr(args, "org_id", None))
 
     # Now filter
     for m in metrics:

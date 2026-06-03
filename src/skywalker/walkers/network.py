@@ -1,3 +1,4 @@
+from google.api_core import exceptions
 from tenacity import retry
 
 from ..clients import (
@@ -53,6 +54,13 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
                     target_tags=list(fw.target_tags) if fw.target_tags else [],
                 )
             )
+    except (
+        exceptions.ServiceUnavailable,
+        exceptions.InternalServerError,
+        exceptions.TooManyRequests,
+        exceptions.GatewayTimeout,
+    ):
+        raise
     except Exception as e:
         logger.warning(f"Failed to list firewalls for {project_id}: {e}")
 
@@ -62,6 +70,13 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
         for net in net_client.list(project=project_id):
             vpc = GCPVPC(name=net.name)
             report.vpcs.append(vpc)
+    except (
+        exceptions.ServiceUnavailable,
+        exceptions.InternalServerError,
+        exceptions.TooManyRequests,
+        exceptions.GatewayTimeout,
+    ):
+        raise
     except Exception as e:
         logger.warning(f"Failed to list networks for {project_id}: {e}")
 
@@ -87,6 +102,13 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
                             flow_logs=bool(sn.enable_flow_logs),
                         )
                     )
+    except (
+        exceptions.ServiceUnavailable,
+        exceptions.InternalServerError,
+        exceptions.TooManyRequests,
+        exceptions.GatewayTimeout,
+    ):
+        raise
     except Exception as e:
         logger.warning(f"Failed to list subnets for {project_id}: {e}")
 
@@ -108,6 +130,13 @@ def get_network_report(project_id: str) -> GCPNetworkReport:
                         address_type=str(addr.address_type),
                     )
                 )
+    except (
+        exceptions.ServiceUnavailable,
+        exceptions.InternalServerError,
+        exceptions.TooManyRequests,
+        exceptions.GatewayTimeout,
+    ):
+        raise
     except Exception as e:
         logger.warning(f"Failed to list static IPs for {project_id}: {e}")
 
