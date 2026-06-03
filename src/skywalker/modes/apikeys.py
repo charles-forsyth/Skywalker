@@ -75,11 +75,21 @@ def run_api_key_audit(
                     if k.is_restricted
                     else "[bold red]⚠ UNRESTRICTED[/bold red]"
                 )
+                # Calculate key-specific aggregate usages and costs
+                cred_ref = f"{k.display_name} ({k.masked_key or k.uid[:8]})"
+                key_usages = report.usages.get(cred_ref, [])
+                key_requests = sum(u.request_count for u in key_usages)
+                key_cost = sum(u.estimated_cost for u in key_usages)
+
                 out_console.print(
                     f"\n• [bold]{k.display_name}[/bold] ({k.masked_key or 'Unknown'})\n"
                     f"  [bold]UID:[/bold] {k.uid}\n"
                     f"  [bold]Created:[/bold] {k.created_at}\n"
-                    f"  [bold]Security Status:[/bold] {status_str}"
+                    f"  [bold]Security Status:[/bold] {status_str}\n"
+                    f"  [bold]Usage (Last {days} Days):[/bold] "
+                    f"{key_requests:,} requests\n"
+                    f"  [bold]Est. Cost (Last {days} Days):[/bold] "
+                    f"[green]${key_cost:,.2f}[/green]"
                 )
                 if k.restrictions:
                     out_console.print("  [bold]Restrictions Applied:[/bold]")
@@ -245,6 +255,8 @@ def run_api_key_audit(
             keys_table.add_column("Key Name (Display Name)")
             keys_table.add_column("Masked Key")
             keys_table.add_column("Security Status")
+            keys_table.add_column("Requests", justify="right")
+            keys_table.add_column("Est. Cost", justify="right")
             keys_table.add_column("Created At")
 
             for r in all_reports:
@@ -254,11 +266,19 @@ def run_api_key_audit(
                         if k.is_restricted
                         else "[bold red]⚠ UNRESTRICTED[/bold red]"
                     )
+                    # Calculate aggregate requests and estimated cost for this key
+                    cred_ref = f"{k.display_name} ({k.masked_key or k.uid[:8]})"
+                    key_usages = r.usages.get(cred_ref, [])
+                    key_requests = sum(u.request_count for u in key_usages)
+                    key_cost = sum(u.estimated_cost for u in key_usages)
+
                     keys_table.add_row(
                         r.project_id,
                         k.display_name or "Unnamed Key",
                         k.masked_key or "Unknown",
                         status_str,
+                        f"{key_requests:,}",
+                        f"${key_cost:,.2f}",
                         k.created_at or "Unknown",
                     )
             out_console.print(keys_table)
