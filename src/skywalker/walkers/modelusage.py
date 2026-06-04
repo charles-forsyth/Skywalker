@@ -194,7 +194,7 @@ def get_model_usage_report(
     try:
         inv_filter = (
             'metric.type = "aiplatform.googleapis.com/publisher/online_serving/'
-            'model_invocation_count"'
+            f'model_invocation_count" AND project = "{project_id}"'
         )
         pages = monitoring_client.list_time_series(
             request={
@@ -253,7 +253,7 @@ def get_model_usage_report(
     try:
         tok_filter = (
             'metric.type = "aiplatform.googleapis.com/publisher/online_serving/'
-            'token_count"'
+            f'token_count" AND project = "{project_id}"'
         )
         pages = monitoring_client.list_time_series(
             request={

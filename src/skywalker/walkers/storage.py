@@ -32,7 +32,7 @@ def fetch_bucket_sizes(project_id: str) -> dict[str, int]:
     # Filter for total_bytes metric
     filter_str = (
         'metric.type = "storage.googleapis.com/storage/total_bytes" '
-        'AND resource.type = "gcs_bucket"'
+        f'AND resource.type = "gcs_bucket" AND project = "{project_id}"'
     )
 
     # Aggregation: Group by bucket_name and take the MAX
