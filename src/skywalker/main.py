@@ -173,17 +173,26 @@ Examples:
             "--monitor --find-zombies --api-key-audit --model-audit is required"
         )
 
-    # Zombie Hunter defaults to all projects if no specific project is provided
-    if args.find_zombies and not args.project_id:
-        args.all_projects = True
+    # Find Zombies requires explicit project scoping or all projects
+    if args.find_zombies and not args.project_id and not args.all_projects:
+        parser.error(
+            "--find-zombies requires either --project-id or --all-projects "
+            "to be explicitly set"
+        )
 
-    # API Key Audit defaults to all projects if no specific project is provided
-    if args.api_key_audit and not args.project_id:
-        args.all_projects = True
+    # API Key Audit requires explicit project scoping or all projects
+    if args.api_key_audit and not args.project_id and not args.all_projects:
+        parser.error(
+            "--api-key-audit requires either --project-id or --all-projects "
+            "to be explicitly set"
+        )
 
-    # Model Audit defaults to all projects if no specific project is provided
-    if args.model_audit and not args.project_id:
-        args.all_projects = True
+    # Model Audit requires explicit project scoping or all projects
+    if args.model_audit and not args.project_id and not args.all_projects:
+        parser.error(
+            "--model-audit requires either --project-id or --all-projects "
+            "to be explicitly set"
+        )
 
     # Configure Logger Level
     if args.verbose:
