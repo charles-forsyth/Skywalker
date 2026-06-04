@@ -159,7 +159,7 @@ def get_api_keys_report(project_id: str, days: int = 30) -> GCPProjectAPIKeysRep
 
     filter_str = (
         'metric.type = "serviceruntime.googleapis.com/api/request_count" '
-        'AND resource.type = "consumed_api"'
+        f'AND resource.type = "consumed_api" AND project = "{project_id}"'
     )
     alignment_period = {"seconds": days * 86400}
     aggregation = monitoring_v3.Aggregation(
