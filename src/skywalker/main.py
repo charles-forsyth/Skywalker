@@ -5,7 +5,7 @@ from rich.console import Console
 
 from .core import STANDARD_REGIONS
 from .logger import logger
-from .modes import apikeys, audit, fix, monitor, zombies
+from .modes import apikeys, audit, fix, modelusage, monitor, zombies
 
 
 def main() -> None:
@@ -59,6 +59,12 @@ Examples:
         "--api-key-audit",
         action="store_true",
         help="Enter Deep API Key Audit and Cost Tracking Mode",
+    )
+
+    parser.add_argument(
+        "--model-audit",
+        action="store_true",
+        help="Enter Model Usage and Cost Audit Mode (Vertex AI / Publisher Models)",
     )
 
     parser.add_argument(
@@ -157,13 +163,14 @@ Examples:
                 args.fix,
                 args.find_zombies,
                 args.api_key_audit,
+                args.model_audit,
             ]
         )
         and not args.fix
     ):
         parser.error(
             "one of the arguments --project-id --all-projects "
-            "--monitor --find-zombies --api-key-audit is required"
+            "--monitor --find-zombies --api-key-audit --model-audit is required"
         )
 
     # Zombie Hunter defaults to all projects if no specific project is provided
@@ -172,6 +179,10 @@ Examples:
 
     # API Key Audit defaults to all projects if no specific project is provided
     if args.api_key_audit and not args.project_id:
+        args.all_projects = True
+
+    # Model Audit defaults to all projects if no specific project is provided
+    if args.model_audit and not args.project_id:
         args.all_projects = True
 
     # Configure Logger Level
@@ -214,6 +225,12 @@ Examples:
             apikeys.run_api_key_audit(args, log_console, out_console)
         except Exception as e:
             logger.error(f"API Key Audit Failed: {escape(str(e))}")
+            exit(1)
+    elif args.model_audit:
+        try:
+            modelusage.run_model_audit(args, log_console, out_console)
+        except Exception as e:
+            logger.error(f"Model Audit Failed: {escape(str(e))}")
             exit(1)
     else:
         # Audit Mode

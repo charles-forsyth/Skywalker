@@ -35,6 +35,12 @@ Aggregates real-time metrics (CPU, Memory, GPU) from hundreds of VMs into a sing
 Interactive "Fix-It" mode to solve common fleet issues at scale.
 *   **Ops Agent Installer:** Mass-deploys the Google Cloud Ops Agent to Linux VMs via SSH (IAP Tunneling) to fix monitoring blind spots.
 
+### 5. 🤖 Model Usage & Cost Tracking
+Tracks and aggregates generative model usage (Vertex AI, Publisher Models) across individual projects or the entire fleet:
+*   **Official Metrics:** Directly queries Cloud Monitoring timeseries for request count (`online_serving/model_invocation_count`) and input/output token counts (`online_serving/token_count`).
+*   **Pricing Map:** Dynamically parses model prices from `model_prices.csv` to calculate accurate estimated spend.
+*   **Fleet-Wide Summaries:** Aggregates costs, requests, and tokens, sortable by estimated cost or project ID, with full detailed nested tabular breakdowns.
+
 ## 📦 Installation
 
 Skywalker is packaged with `uv` for speed and isolation.
@@ -55,6 +61,19 @@ skywalker --project-id ucr-research-computing
 Audit specific services in specific regions.
 ```bash
 skywalker --project-id my-lab-project --services compute storage --regions us-west1
+```
+
+### Model Usage & Cost Audit 🤖
+Audit official Vertex AI/Publisher model consumption and costs over a given time window (defaults to 30 days) for a single project or fleet-wide.
+```bash
+# Audit a single project
+skywalker --project-id ucr-research-computing --model-audit --days 30
+
+# Run fleet-wide and sort projects by estimated cost
+skywalker --all-projects --model-audit --sort-by estimated_cost
+
+# Get a structured JSON output of all models and metrics
+skywalker --all-projects --model-audit --json
 ```
 
 ### Zombie Hunting 🧟
