@@ -129,3 +129,10 @@ def get_apikeys_client() -> Any:
             "apikeys", "v2", cache_discovery=False
         )
     return _thread_local.apikeys_client
+
+
+@lru_cache(maxsize=4)
+def get_bigquery_client(project: str | None = None) -> Any:
+    from google.cloud import bigquery
+
+    return bigquery.Client(project=project)
