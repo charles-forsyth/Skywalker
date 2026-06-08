@@ -5,7 +5,7 @@ from rich.console import Console
 
 from .core import STANDARD_REGIONS
 from .logger import logger
-from .modes import apikeys, audit, fix, modelusage, monitor, zombies
+from .modes import apikeys, audit, billing, fix, modelusage, monitor, zombies
 
 
 def main() -> None:
@@ -65,6 +65,26 @@ Examples:
         "--model-audit",
         action="store_true",
         help="Enter Model Usage and Cost Audit Mode (Vertex AI / Publisher Models)",
+    )
+
+    parser.add_argument(
+        "--billing-report",
+        action="store_true",
+        help="Query and generate BigQuery billing and net cost reports",
+    )
+
+    parser.add_argument(
+        "--billing-account",
+        help="GCP Billing Account ID (default: 01B8C7-D13B5E-17457B)",
+    )
+
+    parser.add_argument(
+        "--billing-table",
+        help=(
+            "BigQuery billing export table "
+            "(default: {scoping_project}.gcp_billing."
+            "gcp_billing_export_v1_{billing_account_with_underscores})"
+        ),
     )
 
     parser.add_argument(
@@ -164,13 +184,15 @@ Examples:
                 args.find_zombies,
                 args.api_key_audit,
                 args.model_audit,
+                args.billing_report,
             ]
         )
         and not args.fix
     ):
         parser.error(
             "one of the arguments --project-id --all-projects "
-            "--monitor --find-zombies --api-key-audit --model-audit is required"
+            "--monitor --find-zombies --api-key-audit "
+            "--model-audit --billing-report is required"
         )
 
     # Find Zombies requires explicit project scoping or all projects
@@ -240,6 +262,12 @@ Examples:
             modelusage.run_model_audit(args, log_console, out_console)
         except Exception as e:
             logger.error(f"Model Audit Failed: {escape(str(e))}")
+            exit(1)
+    elif args.billing_report:
+        try:
+            billing.run_billing_report(args, log_console, out_console)
+        except Exception as e:
+            logger.error(f"Billing Report Failed: {escape(str(e))}")
             exit(1)
     else:
         # Audit Mode

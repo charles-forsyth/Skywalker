@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skywalker"
-version = "0.33.9"
+version = "0.33.10"
 description = "GCP Audit & Reporting Tool for UCR Research Computing ('Ursa Major' Compliance)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,6 +23,7 @@ dependencies = [
     "google-cloud-monitoring>=2.0.0",
     "google-cloud-container>=2.0.0",
     "google-cloud-aiplatform>=1.0.0",
+    "google-cloud-bigquery>=3.0.0",
     "google-cloud-notebooks>=1.0.0",
     "google-cloud-run>=0.10.0",
     "google-cloud-functions>=1.0.0",

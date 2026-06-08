@@ -2064,12 +2064,13 @@ wheels = [
 
 [[package]]
 name = "skywalker"
-version = "0.33.9"
+version = "0.33.10"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },
     { name = "google-cloud-aiplatform" },
     { name = "google-cloud-asset" },
+    { name = "google-cloud-bigquery" },
     { name = "google-cloud-compute" },
     { name = "google-cloud-container" },
     { name = "google-cloud-filestore" },
@@ -2105,6 +2106,7 @@ requires-dist = [
     { name = "google-api-python-client", specifier = ">=2.0.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.0.0" },
     { name = "google-cloud-asset", specifier = ">=3.0.0" },
+    { name = "google-cloud-bigquery", specifier = ">=3.0.0" },
     { name = "google-cloud-compute", specifier = ">=1.0.0" },
     { name = "google-cloud-container", specifier = ">=2.0.0" },
     { name = "google-cloud-filestore", specifier = ">=1.0.0" },
