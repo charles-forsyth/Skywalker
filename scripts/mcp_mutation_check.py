@@ -20,6 +20,18 @@ ROOT = Path(__file__).resolve().parents[1]
 # (file, original text, mutated text, what it guards)
 MUTATIONS = [
     (
+        "mcp_server/auth.py",
+        '                    "scope": GCP_SCOPE,\n                },',
+        "                },",
+        "refresh narrowed to the cloud scope",
+    ),
+    (
+        "mcp_server/auth.py",
+        '        if access and set(str(tokens.get("scope", "")).split()) <= set(',
+        '        if access or set(str(tokens.get("scope", "")).split()) <= set(',
+        "broad sign-in token not used",
+    ),
+    (
         "src/skywalker/intel/gcp.py",
         'if method == "GET":\n        return',
         "if True:\n        return",
