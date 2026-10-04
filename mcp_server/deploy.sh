@@ -88,6 +88,7 @@ find skywalker_src -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || 
 trap 'rm -rf skywalker_src' EXIT
 
 echo "Deploying ${SERVICE} (skywalker ${REV}, as ${SA})..."
+# --set-env-vars/--set-secrets replace the whole set (old MCP_JWT_SECRET goes too).
 # min 1 / max 1: always warm (Chuck), and one instance keeps single-use codes and
 # rotating refresh tokens single use. No session affinity: /mcp is stateless.
 gcloud run deploy "${SERVICE}" \
@@ -97,7 +98,6 @@ gcloud run deploy "${SERVICE}" \
   --service-account "${SA}" \
   --set-env-vars "^@^SKYWALKER_REV=${REV}@SKYWALKER_MCP_USERS=/users/users.yaml@SKYWALKER_MCP_DATA=/data@SKYWALKER_BILLING_TABLE=${SKYWALKER_BILLING_TABLE}@SKYWALKER_BILLING_ACCOUNT=${SKYWALKER_BILLING_ACCOUNT}@SKYWALKER_JOB_PROJECT=${SKYWALKER_JOB_PROJECT}@SKYWALKER_FLEET_SCOPES=${SKYWALKER_FLEET_SCOPES}@SKYWALKER_QUOTA_PROJECT=${SKYWALKER_QUOTA_PROJECT}@SKYWALKER_DOMAIN=${SKYWALKER_DOMAIN:-ucr.edu}" \
   --set-secrets "GOOGLE_OAUTH_CLIENT_ID=skywalker-mcp-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=skywalker-mcp-google-oauth-client-secret:latest,MCP_SEAL_KEY=skywalker-mcp-seal-key:latest,/users/users.yaml=skywalker-mcp-users:latest" \
-  --remove-env-vars MCP_JWT_SECRET \
   --add-volume "name=data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount "volume=data,mount-path=/data" \
   --execution-environment gen2 \
