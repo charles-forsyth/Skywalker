@@ -1,0 +1,27 @@
+# Who may use the Skywalker MCP server (Secret Manager: skywalker-mcp-users).
+# The live copy lives outside the repo (default ~/.config/skywalker/mcp-users.yaml);
+# deploy.sh uploads it when it changes, and the server re-reads it within 15 s of
+# a new secret version reaching the instance.
+#
+# Roles: read < staff < admin.
+#   read   per-project tools (overview, spend, budget, compute, access, exposure ...)
+#   staff  read + account- and fleet-wide tools (fleet, spend_all, budgets, trend)
+#   admin  same as staff today (no write tools exist)
+# Every tool reads Google Cloud as the caller, so a role never grants visibility the
+# person's own Google account does not have.
+domain: example.edu
+users:
+  - {email: alice@example.edu, netid: alice, role: admin}
+  - {email: bob@example.edu, netid: bob, role: read}
+
+# Programs that sign in once as a person and keep their own token, capped at
+# max_role. Redirect URIs: https, or http on loopback (any port).
+clients: []
+#  - id: skywalker-ultra
+#    name: Ultra
+#    max_role: staff
+#    calls_per_min: 60
+#    redirect_uris: ["http://127.0.0.1/callback"]
+
+# Dynamic client ids (mcp_...) to cut off, e.g. a connector on a lost laptop.
+disabled_clients: []

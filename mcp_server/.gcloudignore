@@ -1,0 +1,9 @@
+# Upload only what the image needs.
+*
+!Dockerfile
+!requirements.txt
+!constraints.txt
+!*.py
+!skywalker_src/
+!skywalker_src/**
+skywalker_src/**/__pycache__/
