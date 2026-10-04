@@ -57,7 +57,20 @@ skywalker/
     *   **Secrets:** Never output secrets.
 6.  **Performance:**
     *   Use `ThreadPoolExecutor` for multi-project scans.
-    *   **No Caching:** `joblib` has been removed. Always fetch fresh data.
+    *   **No Caching in the CLI:** `joblib` has been removed. The CLI always fetches fresh data.
+        The MCP server (`mcp_server/`) caches answers per person and client for 120 s;
+        tools take `fresh=true` to skip it.
+7.  **MCP server and `skywalker.intel`:**
+    *   `src/skywalker/intel/` is the library behind `mcp_server/`: plain functions that take
+        a `Gcp` (one caller's token) and return dicts. No printing, no `sys.exit`, no
+        process-wide clients, so many callers can share one process.
+    *   **Read-only is enforced in `intel/gcp.py`** (`check_read_only`). Never add a write
+        verb or a new POST endpoint there without Chuck's say-so and a test.
+    *   The server acts as the caller (their Google token); its service account has no data
+        roles. Billing table, billing account and fleet folders are server config, never
+        caller arguments.
+    *   Tests: `scripts/test_mcp.sh` (pinned env) and `scripts/mcp_mutation_check.py`
+        (every guard must make a test fail). Deploy: `mcp_server/deploy.sh`.
 
 ## Current State (as of Dec 23, 2025)
 

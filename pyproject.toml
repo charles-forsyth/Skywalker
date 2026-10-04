@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "skywalker"
-version = "0.33.10"
+version = "0.34.0"
 description = "GCP Audit & Reporting Tool for UCR Research Computing ('Ursa Major' Compliance)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,7 +46,8 @@ test = [
 dev = [
     "ruff>=0.1.0",
     "mypy>=1.0.0",
-    "pandas-stubs>=2.0.0"
+    "pandas-stubs>=2.0.0",
+    "types-requests>=2.31.0"
 ]
 
 [project.scripts]
@@ -66,6 +67,22 @@ ignore = []
 
 [tool.ruff.lint.isort]
 known-first-party = ["skywalker"]
+
+[tool.ruff.lint.per-file-ignores]
+# The MCP server modules are ported from the Nexus MCP server, which uses os.path
+# for its sealed store and users file; keep them in step rather than rewrite.
+"mcp_server/*.py" = ["PTH", "E501"]
+"mcp_server/examples/*.py" = ["PTH", "E501"]
+# Mutation patterns are exact source snippets; wrapping them would break the match.
+"scripts/mcp_mutation_check.py" = ["E501"]
+# Fakes take the same (params, body, token) signature whether or not they use it.
+"tests/mcp/*.py" = ["ARG001", "ARG002", "ARG005", "E501"]
+# Finding and note strings read better unwrapped.
+"src/skywalker/intel/*.py" = ["E501"]
+
+[tool.pytest.ini_options]
+# The MCP server has its own pinned environment (scripts/test_mcp.sh, CI job "mcp").
+addopts = "--ignore=tests/mcp"
 
 [tool.mypy]
 python_version = "3.10"
