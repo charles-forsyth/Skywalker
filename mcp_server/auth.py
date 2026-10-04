@@ -85,6 +85,11 @@ GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 # server enforces read-only itself (skywalker.intel.gcp.check_read_only).
 GCP_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 GOOGLE_SCOPES = f"openid email {GCP_SCOPE}"
+# Never ask Google for incremental auth (include_granted_scopes): the OAuth client
+# is shared with other UCR tools, and incremental auth folds every scope a person
+# ever granted that client (Gmail, Drive, Calendar...) into Skywalker's grant.
+# Access tokens are also minted with an explicit `scope` so they carry only
+# GCP_SCOPE even when an older grant holds more.
 
 PUBLIC_PATHS = {
     "/authorize",
@@ -263,6 +268,7 @@ class Google:
                     "client_secret": self.client_secret,
                     "refresh_token": refresh_token,
                     "grant_type": "refresh_token",
+                    "scope": GCP_SCOPE,
                 },
                 timeout=15,
             )
@@ -322,7 +328,11 @@ class GoogleTokens:
         }
         self.store.put("google", email, rec)
         access = tokens.get("access_token")
-        if access:
+        # Use the sign-in's access token only when it carries nothing beyond what
+        # Skywalker asked for; otherwise the first call mints a narrowed one.
+        if access and set(str(tokens.get("scope", "")).split()) <= set(
+            GOOGLE_SCOPES.split()
+        ) | {"https://www.googleapis.com/auth/userinfo.email"}:
             with self._guard:
                 self._hot[email] = (
                     str(access),
@@ -733,7 +743,6 @@ Google</a></p>""",
                     "scope": GOOGLE_SCOPES,
                     "state": upstream_state,
                     "access_type": "offline",
-                    "include_granted_scopes": "true",
                     "prompt": "consent select_account" if consent else "select_account",
                     "hd": self.users.domain,
                 }

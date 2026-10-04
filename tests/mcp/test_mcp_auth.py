@@ -580,3 +580,58 @@ def test_signout_leaves_other_people_signed_in_after_restart(
         )
         assert r.status_code == 200
     assert env["server"].google_tokens.has("mikek@ucr.edu")
+
+
+def test_google_request_has_no_incremental_auth(env: dict[str, Any]) -> None:
+    """The OAuth client is shared; incremental auth would pull in Gmail/Drive scopes."""
+    import urllib.parse
+
+    c = env["client"]
+    _, challenge = pkce()
+    r = c.get(
+        "/authorize",
+        params={
+            "client_id": register(c),
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    url = r.text.split('href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+    assert "include_granted_scopes" not in q
+    assert q["scope"] == [f"openid email {auth.GCP_SCOPE}"]
+
+
+def test_refresh_asks_only_for_the_cloud_scope(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: dict[str, Any] = {}
+
+    class Resp:
+        status_code = 200
+
+        def json(self) -> dict[str, Any]:
+            return {"access_token": "narrow", "expires_in": 3600}
+
+    def fake_post(url: str, data: dict[str, Any], timeout: float) -> Resp:
+        sent.update(data)
+        return Resp()
+
+    monkeypatch.setattr(auth.httpx, "post", fake_post)
+    real = auth.Google("cid", "secret")
+    assert real.refresh("rt")["access_token"] == "narrow"
+    assert sent["scope"] == auth.GCP_SCOPE
+
+
+def test_broad_sign_in_token_is_not_used(env: dict[str, Any]) -> None:
+    """A sign-in access token carrying extra scopes is dropped; a narrowed one is minted."""
+    g: FakeGoogle = env["google"]
+    g.scope = (
+        f"openid email {auth.GCP_SCOPE} https://www.googleapis.com/auth/gmail.modify"
+    )
+    sign_in(env, "forsythc@ucr.edu")
+    tok = env["server"].google_tokens.access_token("forsythc@ucr.edu")
+    assert tok != "ga-forsythc@ucr.edu-0" and g.refreshes == ["gr-forsythc@ucr.edu"]
