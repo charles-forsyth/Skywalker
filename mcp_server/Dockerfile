@@ -16,7 +16,7 @@ COPY skywalker_src/__init__.py /app/skywalker/__init__.py
 COPY skywalker_src/intel /app/skywalker/intel
 
 # MCP server code
-COPY server.py app.py auth.py access.py users.py store.py cache.py /app/
+COPY server.py app.py auth.py access.py users.py store.py cache.py scope.py agent.py /app/
 
 EXPOSE 8080
 ENV PYTHONPATH=/app

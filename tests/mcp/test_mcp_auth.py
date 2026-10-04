@@ -46,7 +46,10 @@ READ_TOOLS = {
     "skywalker_services",
     "skywalker_api_traffic",
     "skywalker_quotas",
+    "skywalker_focus",
 }
+# Tools that change only a Skywalker setting of the caller's (never Google Cloud).
+SETTING_TOOLS = {"skywalker_focus"}
 STAFF_TOOLS = {
     "skywalker_fleet",
     "skywalker_spend_all",
@@ -99,7 +102,11 @@ def test_every_tool_is_read_only_and_has_a_role() -> None:
     assert names == READ_TOOLS | STAFF_TOOLS
     for t in tools:
         assert t.name in access.TOOL_ROLES, t.name
-        assert t.annotations is not None and t.annotations.readOnlyHint is True, t.name
+        assert t.annotations is not None, t.name
+        if t.name in SETTING_TOOLS:
+            assert t.annotations.openWorldHint is False, t.name
+        else:
+            assert t.annotations.readOnlyHint is True, t.name
         assert t.annotations.destructiveHint in (None, False), t.name
 
 

@@ -1,5 +1,8 @@
 # MCP transport
 mcp>=1.2.0
+# A2A agent for Gemini Enterprise (agent.py). GE speaks A2A 0.3, so stay on 0.3.x.
+a2a-sdk>=0.3.20,<0.4
+sse-starlette>=2.0
 uvicorn>=0.30.0
 starlette>=0.36.0
 anyio>=4.0.0

@@ -10,9 +10,13 @@
 # Every tool reads Google Cloud as the caller, so a role never grants visibility the
 # person's own Google account does not have.
 domain: example.edu
+# projects: what each person looks at (exact ids, or a prefix ending in "*").
+#   read         the ONLY projects they may ask about (no list = no project)
+#   staff/admin  any project their Google account can see; the first exact id is
+#                their default focus (skywalker_focus changes it, or to "all")
 users:
-  - {email: alice@example.edu, netid: alice, role: admin}
-  - {email: bob@example.edu, netid: bob, role: read}
+  - {email: alice@example.edu, netid: alice, role: admin, projects: [rc-main-project]}
+  - {email: bob@example.edu, netid: bob, role: read, projects: [lab-bob-project, "lab-bob-*"]}
 
 # Programs that sign in once as a person and keep their own token, capped at
 # max_role. Redirect URIs: https, or http on loopback (any port).
@@ -22,6 +26,14 @@ clients: []
 #    max_role: staff
 #    calls_per_min: 60
 #    redirect_uris: ["http://127.0.0.1/callback"]
+#  - id: skywalker-gemini-enterprise      # confidential: GE's forms send a secret
+#    name: Gemini Enterprise
+#    max_role: admin
+#    calls_per_min: 120
+#    client_secret_sha256: <sha256 hex of the secret>
+#    redirect_uris:
+#      - https://vertexaisearch.cloud.google.com/oauth-redirect
+#      - https://vertexaisearch.cloud.google.com/static/oauth/oauth.html
 
 # Dynamic client ids (mcp_...) to cut off, e.g. a connector on a lost laptop.
 disabled_clients: []

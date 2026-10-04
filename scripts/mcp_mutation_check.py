@@ -20,6 +20,72 @@ ROOT = Path(__file__).resolve().parents[1]
 # (file, original text, mutated text, what it guards)
 MUTATIONS = [
     (
+        "mcp_server/scope.py",
+        "    if project == ALL or not project_allowed(ident.projects, project):",
+        "    if False:",
+        "read user held to their projects",
+    ),
+    (
+        "mcp_server/scope.py",
+        "    if is_staff(ident):\n        return\n    if project == ALL",
+        "    if True:\n        return\n    if project == ALL",
+        "only staff skip the project list",
+    ),
+    (
+        "mcp_server/server.py",
+        "            if not scope.is_staff(ident):\n                raise ToolError(\n                    \"'all' is for staff",
+        "            if False:\n                raise ToolError(\n                    \"'all' is for staff",
+        "read user cannot save focus 'all'",
+    ),
+    (
+        "mcp_server/scope.py",
+        "        if not is_staff(ident):\n            raise ToolError(\"'all' is for staff",
+        "        if False:\n            raise ToolError(\"'all' is for staff",
+        "'all' focus is staff only",
+    ),
+    (
+        "mcp_server/scope.py",
+        '    return value if value != ALL and project_allowed(ident.projects, value) else ""',
+        "    return value",
+        "stale read-user focus dropped",
+    ),
+    (
+        "mcp_server/server.py",
+        '            if project_allowed(ident.projects, p["project_id"])',
+        "            if True",
+        "read user's project list filtered",
+    ),
+    (
+        "mcp_server/auth.py",
+        "        if not secrets.compare_digest(got, str(want)):",
+        "        if False:",
+        "confidential client secret checked",
+    ),
+    (
+        "mcp_server/auth.py",
+        '        if (p.get("code_challenge") or not confidential) and (',
+        '        if p.get("code_challenge") and (',
+        "public clients must use PKCE",
+    ),
+    (
+        "mcp_server/agent.py",
+        "        if self._owners.get(task_id) != _owner(context):\n            return None",
+        "        if False:\n            return None",
+        "A2A tasks private to their owner",
+    ),
+    (
+        "mcp_server/agent.py",
+        '        with self.mcp.acting_as(ident, "a2a"):\n            try:',
+        '        with self.mcp.acting_as(Identity("forsythc@ucr.edu", "forsythc", "admin", "x", "x", None, ("home-proj",)), "a2a"):\n            try:',
+        "A2A tools run as the caller",
+    ),
+    (
+        "mcp_server/agent.py",
+        '            and self.limiter.allow("d:" + ident.email, MESSAGES_PER_DAY, 86400.0)',
+        "            or True",
+        "A2A message rate limit",
+    ),
+    (
         "mcp_server/auth.py",
         '                    "scope": GCP_SCOPE,\n                },',
         "                },",
@@ -135,7 +201,7 @@ MUTATIONS = [
     ),
     (
         "mcp_server/auth.py",
-        "            if not _verify_pkce(",
+        '            if rec["code_challenge"] and not _verify_pkce(',
         "            if False and not _verify_pkce(",
         "PKCE",
     ),

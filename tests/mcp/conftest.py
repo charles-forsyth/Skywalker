@@ -41,9 +41,11 @@ MCP_HEADERS = {
 USERS_YAML = """
 domain: ucr.edu
 users:
-  - {email: forsythc@ucr.edu, netid: forsythc, role: admin}
-  - {email: mikek@ucr.edu, netid: mikek, role: read, aliases: [michael.kennedy@ucr.edu]}
+  - {email: forsythc@ucr.edu, netid: forsythc, role: admin, projects: [home-proj]}
+  - {email: mikek@ucr.edu, netid: mikek, role: read, aliases: [michael.kennedy@ucr.edu],
+     projects: [lab-one-proj, "lab-two-*"]}
   - {email: staffer@ucr.edu, netid: staffer, role: staff}
+  - {email: nolab@ucr.edu, netid: nolab, role: read}
   - {email: gone@ucr.edu, netid: gone, role: admin, disabled: true}
 clients:
   - id: skywalker-ultra
@@ -51,7 +53,14 @@ clients:
     max_role: read
     calls_per_min: 5
     redirect_uris: ["http://127.0.0.1/callback"]
-"""
+  - id: skywalker-gemini-enterprise
+    name: Gemini Enterprise
+    max_role: admin
+    client_secret_sha256: "{ge_sha}"
+    redirect_uris:
+      - https://vertexaisearch.cloud.google.com/oauth-redirect
+      - https://vertexaisearch.cloud.google.com/static/oauth/oauth.html
+""".replace("{ge_sha}", hashlib.sha256(b"ge-secret").hexdigest())
 
 
 class FakeGoogle(auth.Google):
