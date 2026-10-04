@@ -71,6 +71,12 @@ skywalker/
         caller arguments.
     *   Tests: `scripts/test_mcp.sh` (pinned env) and `scripts/mcp_mutation_check.py`
         (every guard must make a test fail). Deploy: `mcp_server/deploy.sh`.
+    *   **Project scope** (`mcp_server/scope.py`): a `read` user may ask only about their
+        `projects` in users.yaml, checked before any Google call. Every per-project tool
+        resolves `project_id` through `_pid()`; a new per-project tool must too.
+    *   **A2A agent** (`mcp_server/agent.py`, Gemini Enterprise): tools run in-process as
+        the caller via `GuardedMCP.acting_as`, never as the service account. Stay on
+        `a2a-sdk` 0.3.x (Gemini Enterprise speaks A2A 0.3).
 
 ## Current State (as of Dec 23, 2025)
 

@@ -7,8 +7,10 @@ model). Example::
 
     domain: ucr.edu
     users:
-      - {email: forsythc@ucr.edu, netid: forsythc, role: admin}
-      - {email: mikek@ucr.edu, netid: mikek, role: read}
+      - {email: forsythc@ucr.edu, netid: forsythc, role: admin,
+         projects: [ucr-research-computing]}
+      - {email: mikek@ucr.edu, netid: mikek, role: read,
+         projects: [ucr-ursa-major-chen-lab, "ucr-ursa-major-chen-*"]}
     clients:              # pre-registered programs (Ultra, Atrium, ...)
       - id: skywalker-ultra
         name: Ultra
@@ -19,6 +21,12 @@ model). Example::
 
 Roles, lowest first: ``read`` < ``staff`` < ``admin``. A program client acts as the
 person who signed it in, capped at its ``max_role``.
+
+``projects`` (project ids, or a prefix ending in ``*``) is what a person looks at:
+
+- ``read``: the only projects they may ask about. No list means no project.
+- ``staff`` / ``admin``: any project their own Google account can see; the first
+  exact id is their default focus (``skywalker_focus`` switches it, or to ``all``).
 """
 
 from __future__ import annotations
@@ -44,6 +52,9 @@ RANK = {r: i for i, r in enumerate(ROLES)}
 
 _NETID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,31}$")
 _CLIENT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,63}$")
+# A Google Cloud project id, optionally a prefix ending in "*".
+_PROJECT_PAT = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$|^[a-z][a-z0-9-]{0,28}\*$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 class UsersFileError(ValueError):
@@ -57,6 +68,7 @@ class User:
     role: str
     aliases: tuple[str, ...] = ()
     disabled: bool = False
+    projects: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -69,6 +81,9 @@ class ProgramClient:
     # Calls per minute for this program (None = the server default). A program
     # that makes many small reads (Ultra) gets a larger budget than a chat client.
     calls_per_min: int | None = None
+    # A confidential client (Gemini Enterprise's connector form sends a secret):
+    # sha256 of the secret, checked at /token. None = public client (PKCE only).
+    secret_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +105,22 @@ def cap_role(role: str, ceiling: str | None) -> str:
 
 def role_at_least(role: str, needed: str) -> bool:
     return RANK.get(role, -1) >= RANK[needed]
+
+
+def project_allowed(patterns: tuple[str, ...], project: str) -> bool:
+    """Whether a project id matches one of a person's ``projects`` entries."""
+    for p in patterns:
+        if p.endswith("*"):
+            if project.startswith(p[:-1]):
+                return True
+        elif p == project:
+            return True
+    return False
+
+
+def default_project(patterns: tuple[str, ...]) -> str:
+    """The first exact project id in the list ("" if none)."""
+    return next((p for p in patterns if not p.endswith("*")), "")
 
 
 def valid_redirect(uri: str) -> bool:
@@ -148,7 +179,21 @@ def parse(text: str) -> UsersConfig:
             raise UsersFileError(f"users[{i}]: netid {netid!r} is not valid")
         if role not in RANK:
             raise UsersFileError(f"users[{i}]: role must be one of {ROLES}")
-        user = User(email, netid, role, aliases, bool(u.get("disabled", False)))
+        raw_projects = u.get("projects") or []
+        if not isinstance(raw_projects, list):
+            raise UsersFileError(f"users[{i}]: projects must be a list")
+        projects = tuple(str(p).strip().lower() for p in raw_projects)
+        for p in projects:
+            if not _PROJECT_PAT.match(p):
+                raise UsersFileError(f"users[{i}]: project {p!r} is not valid")
+        user = User(
+            email,
+            netid,
+            role,
+            aliases,
+            bool(u.get("disabled", False)),
+            projects,
+        )
         users.append(user)
         for addr in (email, *aliases):
             by_email[addr] = user
@@ -177,6 +222,13 @@ def parse(text: str) -> UsersConfig:
                     f"clients[{i}]: calls_per_min must be 1-{MAX_CALLS_PER_MIN}"
                 )
             cpm = cpm_raw
+        secret_sha = c.get("client_secret_sha256")
+        if secret_sha is not None:
+            secret_sha = str(secret_sha).strip().lower()
+            if not _SHA256.match(secret_sha):
+                raise UsersFileError(
+                    f"clients[{i}]: client_secret_sha256 must be 64 hex characters"
+                )
         uris = tuple(str(x) for x in (c.get("redirect_uris") or []))
         if not uris or not all(valid_redirect(x) for x in uris):
             raise UsersFileError(
@@ -189,6 +241,7 @@ def parse(text: str) -> UsersConfig:
             uris,
             bool(c.get("disabled", False)),
             cpm,
+            secret_sha,
         )
         clients.append(pc)
         by_client[cid] = pc

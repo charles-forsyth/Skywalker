@@ -29,6 +29,24 @@ Enterprise, Hermes and programs such as Ultra. Built on `skywalker.intel` in thi
   Nothing is shared between people.
 - **Streamable HTTP** at `/mcp` (stateless). The deprecated SSE transport at `/sse`
   stays for one release.
+- **Project scope** (`scope.py`). Each person in `users.yaml` has `projects` (exact
+  ids, or prefixes ending in `*`). A `read` user may ask only about those; a call
+  naming any other project is refused before Google is asked, even if their own
+  Google account could see it, and `skywalker_projects` lists only theirs. Staff and
+  admins may ask about any project their Google account can see. `project_id` is
+  optional on every per-project tool and defaults to the caller's **focus**: their
+  first listed project, changed with `skywalker_focus` (sealed in the store, shared
+  by all their clients). Staff can focus on `all`, which makes `skywalker_overview`
+  the fleet view.
+- **A2A agent for Gemini Enterprise** (`agent.py`) at `/a2a/` in the same service,
+  so there is one policy point. Gemini Enterprise sends the person's Skywalker
+  token (from Skywalker's own OAuth, through the pre-registered confidential client
+  `skywalker-gemini-enterprise`). The model (Gemini on Vertex AI, called as the
+  service account, whose only role is `roles/aiplatform.user`) gets just the tools
+  the caller's role allows, and each tool call runs in-process as the caller
+  through the same role check, project scope, limits and audit as MCP
+  (`channel=a2a`). Tasks are private to the person who made them; 10 questions a
+  minute and 300 a day per person. See "Gemini Enterprise" below.
 
 ## Endpoints
 
@@ -41,6 +59,8 @@ Enterprise, Hermes and programs such as Ultra. Built on `skywalker.intel` in thi
 | `/whoami` | identity, role, whether a Google token is stored |
 | `/signout` (POST) | delete and revoke your Google grant and end all your sessions |
 | `/health` | `rev` (commit) and `tools_version` |
+| `/a2a/` | A2A 0.3 JSON-RPC agent (needs a token) |
+| `/a2a/.well-known/agent-card.json`, `/.well-known/agent-card.json` | agent card (public) |
 
 ## Tools
 
@@ -64,7 +84,8 @@ to run (whole billing account or every project).
 | `skywalker_services` | read | enabled APIs, costly ones first |
 | `skywalker_api_traffic` | read | requests and errors per API, or per method for one API (Gemini vs Claude on Vertex) |
 | `skywalker_quotas` | read | quota usage vs limit, near-limit regions, GPU quotas |
-| `skywalker_whoami` | read | who you are, role, Google token health |
+| `skywalker_whoami` | read | who you are, role, Google token health, focus |
+| `skywalker_focus` | read | show or set your default project (staff: any, or `all`); changes only a Skywalker setting |
 | `skywalker_fleet` | staff | every project: spend leaders, risers, budgets over 100%, unbudgeted spenders, running VMs, public access |
 | `skywalker_spend_all` | staff | spend across the billing account by project, service, SKU, day, region, lab label |
 | `skywalker_budgets` | staff | every budget with this month's % (over / warn / unbudgeted) |
@@ -88,6 +109,9 @@ Server settings (env, set by `deploy.sh` from `~/.config/skywalker/mcp-server.en
 | `SKYWALKER_FLEET_SCOPES` | `folders/123,folders/456` | where `skywalker_fleet` searches |
 | `SKYWALKER_QUOTA_PROJECT` | `my-project` | quota project for API calls (needs Recommender, Policy Analyzer and Cloud Quotas enabled) |
 | `SKYWALKER_MAX_BYTES` | `10737418240` | per-query BigQuery byte cap (default 10 GB) |
+| `SKYWALKER_BASE_URL` | `https://skywalker-...run.app` | public URL; turns on the A2A agent (its card names it) |
+| `SKYWALKER_AGENT_PROJECT` | `my-project` | where the agent's Gemini calls run and bill |
+| `SKYWALKER_AGENT_MODEL` | `gemini-3.8-flash` | the agent's model |
 
 Every billing query filters on the export's partition column and sets
 `maximumBytesBilled`; a month-to-date project query scans about 40 MB.
@@ -112,7 +136,7 @@ instance keeps single-use codes single use).
 ## Test
 
 ```bash
-scripts/test_mcp.sh                 # 68 tests: fake Google, fake Cloud, real MCP transport
+scripts/test_mcp.sh                 # fake Google, fake Cloud, fake model; real MCP and A2A transport
 uv run python scripts/mcp_mutation_check.py   # every guard must make a test fail
 ```
 
@@ -122,4 +146,47 @@ Live: `mcp_server/examples/live_client.py login|whoami|tools|call <tool> '<json>
 
 - Claude Code: `claude mcp add --transport http skywalker <URL>/mcp`
 - Hermes: `hermes mcp add skywalker --url <URL>/mcp --auth oauth` (run alone, then restart)
-- Gemini Enterprise / claude.ai: add a custom connector with `<URL>/mcp`.
+- claude.ai: add a custom connector with `<URL>/mcp`.
+
+## Gemini Enterprise
+
+Two ways in; both act as the signed-in person and both need a Gemini Enterprise
+admin (`roles/discoveryengine.admin` or the Gemini Enterprise Admin role) for the
+app. Both use the confidential program client in `users.yaml`:
+
+```yaml
+clients:
+  - id: skywalker-gemini-enterprise
+    name: Gemini Enterprise
+    max_role: admin            # a person's own role still applies (Mike stays read)
+    calls_per_min: 120
+    client_secret_sha256: <sha256 of the secret>   # the secret itself goes in GE's form
+    redirect_uris:
+      - https://vertexaisearch.cloud.google.com/oauth-redirect
+      - https://vertexaisearch.cloud.google.com/static/oauth/oauth.html
+```
+
+**A2A agent (recommended): Skywalker answers in its own words.** Register with the
+agent card from `/a2a/.well-known/agent-card.json` (console: Gemini Enterprise > app >
+Agents > Add agent > Custom agent via A2A). OAuth settings:
+
+| Field | Value |
+|---|---|
+| Client ID | `skywalker-gemini-enterprise` |
+| Client secret | the secret whose sha256 is in `users.yaml` |
+| Authorization URI | `<URL>/authorize?client_id=skywalker-gemini-enterprise&redirect_uri=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Fstatic%2Foauth%2Foauth.html&scope=mcp&response_type=code&access_type=offline&prompt=consent&include_granted_scopes=true` |
+| Token URI | `<URL>/token` |
+| Scopes | `mcp` |
+
+(Google's form asks for `include_granted_scopes` and `prompt`; Skywalker ignores
+them, and never forwards them to Google.)
+
+**Custom MCP data store: Gemini's own assistant calls the tools.** Pre-GA; an org
+admin must first turn off the constraint "Disable custom MCP server connector for
+Gemini Enterprise" and allow the egress host. Data stores > Create > Custom MCP
+Server: server URL `<URL>/mcp`, authorization URL `<URL>/authorize`, token URL
+`<URL>/token`, client ID and secret as above, scope `mcp`, PKCE on. Then Actions >
+Reload custom actions and enable the Skywalker tools.
+
+Public cloud regions: Skywalker answers only to its own tokens, so Gemini Enterprise
+needs no extra Cloud Run invoker grant (the service is public; sign-in is the gate).

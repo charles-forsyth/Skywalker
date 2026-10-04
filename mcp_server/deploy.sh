@@ -3,7 +3,8 @@
 #
 # Infrastructure (each step is idempotent and says "ok" when already in place):
 #   - service account  skywalker-mcp@$PROJECT  (no Google Cloud data roles at all:
-#                      every tool reads as the signed-in caller)
+#                      every tool reads as the signed-in caller; its only role is
+#                      roles/aiplatform.user for the A2A agent's Gemini calls)
 #   - bucket           gs://$PROJECT-skywalker-mcp-data  (sealed OAuth state and
 #                      each person's sealed Google refresh token)
 #   - secrets          skywalker-mcp-google-oauth-client-id / -secret (existing)
@@ -39,6 +40,10 @@ source "$SETTINGS"
 : "${SKYWALKER_BILLING_TABLE:?}" "${SKYWALKER_BILLING_ACCOUNT:?}" "${SKYWALKER_JOB_PROJECT:?}"
 SKYWALKER_FLEET_SCOPES="${SKYWALKER_FLEET_SCOPES:-}"
 SKYWALKER_QUOTA_PROJECT="${SKYWALKER_QUOTA_PROJECT:-$PROJECT}"
+# The A2A agent (Gemini Enterprise). Its card names this URL, so it is fixed here.
+SKYWALKER_BASE_URL="${SKYWALKER_BASE_URL:-https://skywalker-mcp-server-dsfh6rrlia-uc.a.run.app}"
+SKYWALKER_AGENT_PROJECT="${SKYWALKER_AGENT_PROJECT:-$PROJECT}"
+SKYWALKER_AGENT_MODEL="${SKYWALKER_AGENT_MODEL:-gemini-3.8-flash}"
 
 # --- runtime service account (no data roles) --------------------------------------
 if have gcloud iam service-accounts describe "$SA" --project "$PROJECT"; then echo "ok   $SA"
@@ -46,6 +51,11 @@ else
   gcloud iam service-accounts create "${SA%%@*}" --project "$PROJECT" \
     --display-name "Skywalker MCP server (no data roles; reads as the caller)"
 fi
+
+# Gemini for the A2A agent: the one Google Cloud role this account holds.
+gcloud projects add-iam-policy-binding "$SKYWALKER_AGENT_PROJECT" \
+  --member "serviceAccount:$SA" --role roles/aiplatform.user --condition=None >/dev/null
+echo "ok   $SA may call Gemini in $SKYWALKER_AGENT_PROJECT (A2A agent)"
 
 # --- bucket for sealed state --------------------------------------------------------
 if have gcloud storage buckets describe "gs://$BUCKET"; then echo "ok   gs://$BUCKET"
@@ -96,7 +106,7 @@ gcloud run deploy "${SERVICE}" \
   --project "${PROJECT}" \
   --region "${REGION}" \
   --service-account "${SA}" \
-  --set-env-vars "^@^SKYWALKER_REV=${REV}@SKYWALKER_MCP_USERS=/users/users.yaml@SKYWALKER_MCP_DATA=/data@SKYWALKER_BILLING_TABLE=${SKYWALKER_BILLING_TABLE}@SKYWALKER_BILLING_ACCOUNT=${SKYWALKER_BILLING_ACCOUNT}@SKYWALKER_JOB_PROJECT=${SKYWALKER_JOB_PROJECT}@SKYWALKER_FLEET_SCOPES=${SKYWALKER_FLEET_SCOPES}@SKYWALKER_QUOTA_PROJECT=${SKYWALKER_QUOTA_PROJECT}@SKYWALKER_DOMAIN=${SKYWALKER_DOMAIN:-ucr.edu}" \
+  --set-env-vars "^@^SKYWALKER_REV=${REV}@SKYWALKER_MCP_USERS=/users/users.yaml@SKYWALKER_MCP_DATA=/data@SKYWALKER_BILLING_TABLE=${SKYWALKER_BILLING_TABLE}@SKYWALKER_BILLING_ACCOUNT=${SKYWALKER_BILLING_ACCOUNT}@SKYWALKER_JOB_PROJECT=${SKYWALKER_JOB_PROJECT}@SKYWALKER_FLEET_SCOPES=${SKYWALKER_FLEET_SCOPES}@SKYWALKER_QUOTA_PROJECT=${SKYWALKER_QUOTA_PROJECT}@SKYWALKER_DOMAIN=${SKYWALKER_DOMAIN:-ucr.edu}@SKYWALKER_BASE_URL=${SKYWALKER_BASE_URL}@SKYWALKER_AGENT_PROJECT=${SKYWALKER_AGENT_PROJECT}@SKYWALKER_AGENT_MODEL=${SKYWALKER_AGENT_MODEL}" \
   --set-secrets "GOOGLE_OAUTH_CLIENT_ID=skywalker-mcp-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=skywalker-mcp-google-oauth-client-secret:latest,MCP_SEAL_KEY=skywalker-mcp-seal-key:latest,/users/users.yaml=skywalker-mcp-users:latest" \
   --add-volume "name=data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount "volume=data,mount-path=/data" \

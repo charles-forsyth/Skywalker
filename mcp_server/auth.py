@@ -31,6 +31,12 @@ Endpoints:
   /revoke                                           (RFC 7009)
   /whoami                                           (who this token is; needs a token)
   /health                                           (liveness, build stamp)
+
+Program clients in users.yaml are public (PKCE) unless they carry
+`client_secret_sha256`. Gemini Enterprise is such a confidential client: its
+connector forms send a client secret (in the body or as HTTP Basic), and its A2A
+authorization URL carries no PKCE challenge, so a confidential client may skip
+PKCE and must prove the secret at /token instead.
 """
 
 from __future__ import annotations
@@ -98,6 +104,9 @@ PUBLIC_PATHS = {
     "/register",
     "/revoke",
     "/health",
+    # The A2A agent card is public (it names the sign-in endpoints); /a2a/ is not.
+    "/a2a/.well-known/agent-card.json",
+    "/a2a/.well-known/agent.json",
 }
 
 
@@ -115,6 +124,9 @@ class Identity:
     client_name: str
     # A program client's own budget from users.yaml (None = server defaults).
     calls_per_min: int | None = None
+    # users.yaml `projects`: for `read`, the only projects they may ask about;
+    # for staff/admin, where their default focus comes from.
+    projects: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -401,6 +413,19 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _client_credentials(request: Request, form: Any) -> tuple[str, str]:
+    """(client_id, client_secret) from HTTP Basic or the form body (RFC 6749 2.3.1)."""
+    header = request.headers.get("authorization", "")
+    if header.lower().startswith("basic "):
+        try:
+            raw = base64.b64decode(header[6:].strip()).decode()
+            cid, _, sec = raw.partition(":")
+            return urllib.parse.unquote_plus(cid), urllib.parse.unquote_plus(sec)
+        except Exception:
+            return "", ""
+    return str(form.get("client_id", "")), str(form.get("client_secret", ""))
+
+
 def _client_ip(request: Request) -> str:
     fwd = request.headers.get("x-forwarded-for", "")
     if fwd:
@@ -472,6 +497,7 @@ class AuthServer:
                 "max_role": pc.max_role,
                 "calls_per_min": pc.calls_per_min,
                 "program": True,
+                "secret_sha256": pc.secret_sha256,
             }
         if client_id in cfg.disabled_clients:
             return None
@@ -558,6 +584,7 @@ class AuthServer:
                 calls_per_min=client.get("calls_per_min")
                 if client.get("program")
                 else None,
+                projects=user.projects,
             ),
             "",
         )
@@ -595,7 +622,11 @@ class AuthServer:
                 "response_types_supported": ["code"],
                 "grant_types_supported": ["authorization_code", "refresh_token"],
                 "code_challenge_methods_supported": ["S256"],
-                "token_endpoint_auth_methods_supported": ["none"],
+                "token_endpoint_auth_methods_supported": [
+                    "none",
+                    "client_secret_post",
+                    "client_secret_basic",
+                ],
                 "revocation_endpoint_auth_methods_supported": ["none"],
                 "scopes_supported": [SCOPE],
             }
@@ -680,13 +711,18 @@ class AuthServer:
 
         if p.get("response_type") != "code":
             return fail("unsupported_response_type", "code only")
-        if not p.get("code_challenge") or p.get("code_challenge_method") != "S256":
+        confidential = bool(client.get("secret_sha256"))
+        # PKCE is required of public clients; a confidential client (secret
+        # checked at /token) may use it too, and then it is checked.
+        if (p.get("code_challenge") or not confidential) and (
+            not p.get("code_challenge") or p.get("code_challenge_method") != "S256"
+        ):
             return fail("invalid_request", "PKCE with S256 is required")
 
         pending = {
             "client_id": client["client_id"],
             "redirect_uri": ru,
-            "code_challenge": p["code_challenge"],
+            "code_challenge": p.get("code_challenge", ""),
             "state": p.get("state", ""),
             "expires": time.time() + GRANT_WINDOW,
         }
@@ -855,7 +891,7 @@ Google</a></p>""",
         except Exception:
             return _oauth_error("invalid_request", "form body required")
         grant = str(form.get("grant_type", ""))
-        client_id = str(form.get("client_id", ""))
+        client_id, client_secret = _client_credentials(request, form)
 
         if grant == "authorization_code":
             rec = self.store.pop("code", str(form.get("code", "")))
@@ -865,11 +901,20 @@ Google</a></p>""",
                 return _oauth_error(
                     "invalid_grant", "code was issued to another client"
                 )
-            if str(form.get("redirect_uri", "")) != rec["redirect_uri"]:
+            sent_ru = str(form.get("redirect_uri", ""))
+            if sent_ru != rec["redirect_uri"] and not (
+                # A confidential client that proves its secret may leave it out.
+                not sent_ru and self._confidential(rec["client_id"])
+            ):
                 return _oauth_error("invalid_grant", "redirect_uri mismatch")
-            if not _verify_pkce(
+            secret_err = self._check_secret(rec["client_id"], client_secret)
+            if secret_err:
+                return secret_err
+            if rec["code_challenge"] and not _verify_pkce(
                 str(form.get("code_verifier", "")), rec["code_challenge"]
             ):
+                return _oauth_error("invalid_grant", "PKCE verification failed")
+            if not rec["code_challenge"] and not self._confidential(rec["client_id"]):
                 return _oauth_error("invalid_grant", "PKCE verification failed")
             if self.users.lookup(rec["email"]) is None:
                 return _oauth_error("invalid_grant", "user is no longer allowed")
@@ -886,6 +931,9 @@ Google</a></p>""",
                 return _oauth_error(
                     "invalid_grant", "refresh token belongs to another client"
                 )
+            secret_err = self._check_secret(rec["client_id"], client_secret)
+            if secret_err:
+                return secret_err
             if self.store.pop("refresh", _hash(rt)) is None:  # rotate; lost race
                 return _oauth_error("invalid_grant", "refresh token already used")
             if not client_id:
@@ -920,6 +968,22 @@ Google</a></p>""",
         return _oauth_error(
             "unsupported_grant_type", "authorization_code or refresh_token"
         )
+
+    def _confidential(self, client_id: str) -> bool:
+        client = self.lookup_client(client_id)
+        return bool(client and client.get("secret_sha256"))
+
+    def _check_secret(self, client_id: str, secret: str) -> JSONResponse | None:
+        """None if the client is public or proved its secret; else the error."""
+        client = self.lookup_client(client_id)
+        want = (client or {}).get("secret_sha256")
+        if not want:
+            return None
+        got = hashlib.sha256(secret.encode()).hexdigest() if secret else ""
+        if not secrets.compare_digest(got, str(want)):
+            audit("token", client=client_id, decision="denied", reason="bad_secret")
+            return _oauth_error("invalid_client", "client authentication failed", 401)
+        return None
 
     # -- revoke, whoami, health ------------------------------------------------------
 
