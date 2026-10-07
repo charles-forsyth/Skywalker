@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Skywalker - GCP audit and reporting for UCR Research Computing</title>
+    <meta name="description" content="Skywalker is a GCP audit and reporting tool for UCR Research Computing: deep audits across 9 services, fleet performance monitoring, a zombie resource hunter, model usage tracking, and a read-only MCP server.">
+    <meta name="theme-color" content="#0a110d">
+    <link rel="canonical" href="https://charles-forsyth.github.io/Skywalker/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Skywalker - GCP audit and reporting">
+    <meta property="og:description" content="Walks the Google Cloud hierarchy to find security risks, wasted spend and monitoring blind spots across a research fleet. CLI plus a read-only MCP server.">
+    <meta property="og:url" content="https://charles-forsyth.github.io/Skywalker/">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="site.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <a class="brand" href="https://charles-forsyth.github.io/">Charles Forsyth</a>
+          <span class="crumb">Projects</span>
+        </div>
+        <span class="topbar-project">Skywalker</span>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-grid">
+          <div>
+            <p class="kicker">UCR Research Computing &middot; v0.34.2</p>
+            <h1 id="page-title">Skywalker</h1>
+            <p class="tagline">GCP audit and reporting for a research cloud fleet.</p>
+            <p class="pitch">Skywalker walks the Google Cloud hierarchy to give administrators visibility into the research fleet: <strong>security risks, wasted spend and operational hygiene</strong> across hundreds of projects.</p>
+            <p class="pitch">It ships as a Python CLI and as an MCP server that answers "what is happening in my Google Cloud project?" for AI assistants. Both are read-only by default; the CLI's one write path (<code>--fix</code>) asks for confirmation.</p>
+            <ul class="meta-row" aria-label="Project facts">
+              <li>Python</li>
+              <li>Google Cloud client libraries</li>
+              <li>Pydantic schemas</li>
+              <li>uv</li>
+            </ul>
+            <div class="cta-buttons">
+              <a class="btn btn-primary" href="https://github.com/charles-forsyth/Skywalker"><i class="fa-brands fa-github" aria-hidden="true"></i> View on GitHub</a>
+              <a class="btn btn-secondary" href="https://github.com/charles-forsyth/Skywalker/releases/tag/v0.34.2"><i class="fa-solid fa-tag" aria-hidden="true"></i> Release v0.34.2</a>
+              <a class="btn btn-ghost" href="#quick-start"><i class="fa-solid fa-play" aria-hidden="true"></i> Get started</a>
+            </div>
+          </div>
+
+          <div class="terminal">
+            <div class="terminal-bar">
+              <span class="dot dot-a"></span><span class="dot dot-b"></span><span class="dot"></span>
+              <span class="terminal-title">skywalker</span>
+            </div>
+            <pre><code><span class="c"># Audit specific services in specific regions</span>
+<span class="p">$ </span>skywalker --project-id my-lab-project \
+    --services compute storage --regions us-west1
+
+<span class="c"># Find wasted resources across ALL projects in the org</span>
+<span class="p">$ </span>skywalker --find-zombies
+
+<span class="c"># Live dashboard of top CPU/Memory consumers</span>
+<span class="p">$ </span>skywalker --monitor --limit 20
+
+<span class="c"># Fleet-wide model usage, sorted by estimated cost</span>
+<span class="p">$ </span>skywalker --all-projects --model-audit \
+    --sort-by estimated_cost
+
+<span class="c"># Report for stakeholders</span>
+<span class="p">$ </span>skywalker --all-projects --html fleet_report.html</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="container">
+          <p class="section-label">What it does</p>
+          <h2 id="features-title">Key capabilities</h2>
+          <p class="section-lead">Scan one project or the whole organization, then act on what it finds. Each mode is a CLI flag.</p>
+          <div class="card-grid">
+            <article class="card">
+              <div class="card-icon"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></div>
+              <h3>Deep audit</h3>
+              <p>Resources across 9 GCP services: Compute Engine, Storage, IAM, Network, GKE, Cloud Run, Cloud SQL, Filestore and Vertex AI.</p>
+            </article>
+            <article class="card">
+              <div class="card-icon"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i></div>
+              <h3>Fleet performance</h3>
+              <p>Aggregates CPU, memory and GPU metrics from many VMs into one "Mission Control" dashboard. Finds overloaded instances and VMs missing the Ops Agent.</p>
+            </article>
+            <article class="card">
+              <div class="card-icon"><i class="fa-solid fa-skull" aria-hidden="true"></i></div>
+              <h3>Zombie Hunter</h3>
+              <p>Orphaned disks, unused static IPs and buckets with zero egress for 30 days, with an estimate of potential monthly savings.</p>
+            </article>
+            <article class="card">
+              <div class="card-icon"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i></div>
+              <h3>Fix-It mode</h3>
+              <p>Installs the Google Cloud Ops Agent on Linux VMs over SSH through IAP tunneling, to close monitoring blind spots. Interactive and scoped.</p>
+            </article>
+            <article class="card">
+              <div class="card-icon"><i class="fa-solid fa-robot" aria-hidden="true"></i></div>
+              <h3>Model usage and cost</h3>
+              <p>Queries Cloud Monitoring for Vertex AI and publisher model request and token counts, then prices them from a model price map.</p>
+            </article>
+            <article class="card">
+              <div class="card-icon"><i class="fa-solid fa-key" aria-hidden="true"></i></div>
+              <h3>API key audit</h3>
+              <p>Deep API key audit with request counts and estimated cost per key (<code>--api-key-audit</code>).</p>
+            </article>
+            <article class="card">
+              <div class="card-icon"><i class="fa-solid fa-file-invoice" aria-hidden="true"></i></div>
+              <h3>Billing reports</h3>
+              <p>Queries a BigQuery billing export for gross and net cost reports (<code>--billing-report</code>).</p>
+            </article>
+            <article class="card">
+              <div class="card-icon"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i></div>
+              <h3>Reports and JSON</h3>
+              <p>Render audits to HTML or PDF for stakeholders, export fleet data to CSV, or emit structured JSON.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-light" id="mcp" aria-labelledby="mcp-title">
+        <div class="container">
+          <p class="section-label">MCP server</p>
+          <h2 id="mcp-title">Questions about a project, answered in one call</h2>
+          <p class="section-lead">The MCP server, built on the <code>skywalker.intel</code> library in this repo, exposes read-only tools for Claude, Gemini Enterprise, Hermes and other programs. Google's own remote MCP servers expose raw APIs one call per tool; Skywalker is the layer above them, joining APIs and the billing export into findings.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th scope="col">Tool</th><th scope="col">Role</th><th scope="col">What it answers</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>skywalker_overview</code></td><td>read</td><td>Findings first, then spend and 7-day trend, budget, VMs and GPUs, idle disks and IPs, IAM risks, exposure, admin changes</td></tr>
+                <tr><td><code>skywalker_spend</code></td><td>read</td><td>Billing export: gross, credits, net by service, SKU, day or region</td></tr>
+                <tr><td><code>skywalker_compute</code></td><td>read</td><td>VMs, GPUs, spot, external IPs, days stopped; unattached disks first</td></tr>
+                <tr><td><code>skywalker_recommendations</code></td><td>read</td><td>Recommender: idle resources, rightsizing, unused IAM roles, with monthly savings</td></tr>
+                <tr><td><code>skywalker_access</code></td><td>read</td><td>IAM policy with risky grants flagged</td></tr>
+                <tr><td><code>skywalker_exposure</code></td><td>read</td><td>Public IAM bindings, open admin ports, VMs with external IPs, SCC findings</td></tr>
+                <tr><td><code>skywalker_activity</code></td><td>read</td><td>Admin Activity audit log: who changed what</td></tr>
+                <tr><td><code>skywalker_fleet</code></td><td>staff</td><td>Every project: spend leaders, risers, budgets over 100%, running VMs, public access</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">A selection of the tools; the <a href="https://github.com/charles-forsyth/Skywalker/blob/master/mcp_server/README.md">MCP server README</a> lists all of them, plus endpoints, configuration and client setup for Claude Code, Hermes and claude.ai.</p>
+        </div>
+      </section>
+
+      <section class="section" id="how-it-works" aria-labelledby="how-title">
+        <div class="container">
+          <p class="section-label">How it works</p>
+          <h2 id="how-title">Walkers, schemas and modes</h2>
+          <p class="section-lead">Modular "walkers" query each service through the official Google Cloud Python clients, results are validated against strict Pydantic schemas, and modes turn them into tables, dashboards and reports. A <code>ThreadPoolExecutor</code> scans many projects in parallel. The CLI always fetches fresh data.</p>
+          <div class="arch" role="group" aria-label="Architecture diagram">
+            <div class="arch-col">
+              <div class="arch-box">
+                <h3>Google Cloud</h3>
+                <p>Compute, Storage, IAM, GKE, Run, SQL, Filestore, Vertex AI, Monitoring, Asset Inventory, BigQuery billing export.</p>
+              </div>
+            </div>
+            <div class="arch-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></div>
+            <div class="arch-col">
+              <div class="arch-box hub">
+                <h3>Skywalker core</h3>
+                <ul>
+                  <li>Centralized client factory</li>
+                  <li>Walkers: one per service</li>
+                  <li>Pydantic schemas</li>
+                  <li>Parallel project scans</li>
+                  <li><code>skywalker.intel</code>: per-caller, JSON-only library</li>
+                </ul>
+              </div>
+            </div>
+            <div class="arch-arrow"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></div>
+            <div class="arch-col">
+              <div class="arch-box">
+                <h3>CLI modes</h3>
+                <p>audit, monitor, zombies, fix, model usage, API keys, billing.</p>
+              </div>
+              <div class="arch-box">
+                <h3>Outputs</h3>
+                <p>Rich terminal tables, JSON, CSV, HTML and PDF reports.</p>
+              </div>
+              <div class="arch-box">
+                <h3>MCP server</h3>
+                <p>Streamable HTTP at <code>/mcp</code>, OAuth 2.1 sign-in, acting as the caller.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-light" id="safety" aria-labelledby="safety-title">
+        <div class="container">
+          <p class="section-label">Safety</p>
+          <h2 id="safety-title">Read-only by default</h2>
+          <ul class="principles">
+            <li><strong>CLI: read-only except --fix</strong>Remediation must be interactive and scoped; it asks for confirmation before installing anything.</li>
+            <li><strong>MCP: read-only, enforced in code</strong>The intel layer refuses every request that is not a GET or one of three read RPCs before it leaves the process. There are no write tools.</li>
+            <li><strong>Acts as the caller</strong>Every MCP tool call runs on the signed-in person's own Google access token, so they see exactly what their account can see and Google's audit logs name them. The server's service account has no Google Cloud data roles.</li>
+            <li><strong>Sealed tokens</strong>Each person's Google refresh token is sealed with AES-256-GCM in the store. Access and refresh tokens are stored hashed and sealed.</li>
+            <li><strong>Roles, limits and audit</strong>Roles checked on every call, tool list filtered per caller, per-person and per-client rate limits, and one JSON audit line per sign-in and tool call.</li>
+            <li><strong>Bounded billing queries</strong>Every billing query filters on the export's partition column and sets a maximum bytes billed cap.</li>
+            <li><strong>No secrets in output</strong>Secrets are never printed. API key strings are never read by the MCP tools. CI checks the repo for keys.</li>
+            <li><strong>Tested guards</strong>A mutation check verifies that disabling any guard makes a test fail.</li>
+          </ul>
+          <p class="note">Newer on master (after v0.34.2): per-person project scope for read users and an A2A agent for Gemini Enterprise that runs through the same role checks, limits and audit.</p>
+        </div>
+      </section>
+
+      <section class="section" id="quick-start" aria-labelledby="qs-title">
+        <div class="container">
+          <p class="section-label">Quick start</p>
+          <h2 id="qs-title">Install and run</h2>
+          <p class="section-lead">Skywalker is packaged with <code>uv</code>. From a clone of the repo, install the tool, then run it with your own Google Cloud credentials. Project names below are placeholders.</p>
+          <div class="qs-grid">
+            <div>
+              <div class="code-block">
+                <p class="code-label">Install</p>
+                <button class="copy-btn" type="button" data-target="code-install" aria-label="Copy install commands">Copy</button>
+                <pre><code id="code-install">git clone https://github.com/charles-forsyth/Skywalker.git
+cd Skywalker
+uv tool install . --force</code></pre>
+              </div>
+              <div class="code-block">
+                <p class="code-label">Standard audit</p>
+                <button class="copy-btn" type="button" data-target="code-audit" aria-label="Copy audit commands">Copy</button>
+                <pre><code id="code-audit"><span class="c"># Audit a single project for all services</span>
+skywalker --project-id my-lab-project
+
+<span class="c"># Model usage over the last 30 days, as JSON</span>
+skywalker --all-projects --model-audit --json</code></pre>
+              </div>
+            </div>
+            <div>
+              <div class="code-block">
+                <p class="code-label">Remediation (Fix-It)</p>
+                <button class="copy-btn" type="button" data-target="code-fix" aria-label="Copy remediation command">Copy</button>
+                <pre><code id="code-fix"><span class="c"># Install Ops Agent on VMs in the monitoring scope missing it</span>
+skywalker --fix ops-agent --monitor</code></pre>
+              </div>
+              <div class="code-block">
+                <p class="code-label">Add the MCP server to a client</p>
+                <button class="copy-btn" type="button" data-target="code-mcp" aria-label="Copy MCP client commands">Copy</button>
+                <pre><code id="code-mcp">claude mcp add --transport http skywalker &lt;URL&gt;/mcp
+hermes mcp add skywalker --url &lt;URL&gt;/mcp --auth oauth</code></pre>
+              </div>
+            </div>
+          </div>
+          <p class="note">Contributing: feature branch, tests with <code>pytest</code>, typing with <code>mypy src</code>, formatting with <code>ruff format .</code>, then a pull request.</p>
+        </div>
+      </section>
+
+      <section class="section section-light" id="links" aria-labelledby="links-title">
+        <div class="container">
+          <p class="section-label">Links</p>
+          <h2 id="links-title">Read more</h2>
+          <div class="link-grid">
+            <a href="https://github.com/charles-forsyth/Skywalker/blob/master/README.md"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> README</a>
+            <a href="https://github.com/charles-forsyth/Skywalker/blob/master/mcp_server/README.md"><i class="fa-solid fa-plug" aria-hidden="true"></i> MCP server docs</a>
+            <a href="https://github.com/charles-forsyth/Skywalker/tree/master/src/skywalker"><i class="fa-solid fa-code" aria-hidden="true"></i> Source</a>
+            <a href="https://github.com/charles-forsyth/Skywalker/tree/master/tests"><i class="fa-solid fa-vial" aria-hidden="true"></i> Tests</a>
+            <a href="https://github.com/charles-forsyth/Skywalker/releases"><i class="fa-solid fa-tags" aria-hidden="true"></i> Releases</a>
+            <a href="https://github.com/charles-forsyth/Skywalker/issues"><i class="fa-solid fa-circle-dot" aria-hidden="true"></i> Issues</a>
+            <a href="https://github.com/charles-forsyth/Skywalker/blob/master/LICENSE"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i> License (MIT)</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Built by <a href="https://charles-forsyth.github.io/">Charles Forsyth</a>, UC Riverside Research Computing.</p>
+      <p><a href="https://github.com/charles-forsyth/Skywalker/blob/master/LICENSE">MIT License</a></p>
+    </footer>
+
+    <script src="site.js" defer></script>
+  </body>
+</html>
