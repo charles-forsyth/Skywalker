@@ -275,7 +275,9 @@ def _ge_code(env: dict[str, Any], with_pkce: bool) -> tuple[str, str]:
     loc = (
         r.headers["location"]
         if r.status_code == 302
-        else r.text.split('href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
+        else r.text.split('class="b" href="', 1)[1]
+        .split('"', 1)[0]
+        .replace("&amp;", "&")
     )
     g = urllib.parse.parse_qs(urllib.parse.urlsplit(loc).query)
     env["google"].claims = {
