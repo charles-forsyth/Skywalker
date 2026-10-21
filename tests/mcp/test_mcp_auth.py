@@ -515,7 +515,9 @@ def test_code_needs_pkce_and_is_single_use(env: dict[str, Any]) -> None:
         },
         follow_redirects=False,
     )
-    google_url = r.text.split('href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
+    google_url = (
+        r.text.split('class="b" href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
+    )
     state = urllib.parse.parse_qs(urllib.parse.urlsplit(google_url).query)["state"][0]
     env["google"].claims = {
         "email": "forsythc@ucr.edu",
@@ -606,7 +608,7 @@ def test_google_request_has_no_incremental_auth(env: dict[str, Any]) -> None:
         },
         follow_redirects=False,
     )
-    url = r.text.split('href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
+    url = r.text.split('class="b" href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
     q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
     assert "include_granted_scopes" not in q
     assert q["scope"] == [f"openid email {auth.GCP_SCOPE}"]

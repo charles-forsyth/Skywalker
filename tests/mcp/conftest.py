@@ -202,7 +202,11 @@ def _authorize(c: TestClient, client_id: str, redirect: str, challenge: str) -> 
     assert r.status_code in (200, 302), r.text
     if r.status_code == 200:
         assert "Continue with" in r.text
-        return r.text.split('href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
+        return (
+            r.text.split('class="b" href="', 1)[1]
+            .split('"', 1)[0]
+            .replace("&amp;", "&")
+        )
     return str(r.headers["location"])
 
 
