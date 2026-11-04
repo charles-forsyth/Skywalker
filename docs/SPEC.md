@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Spec version | 1.0, 2026-11-04 (first spec; written from the code, README files and the live service) |
+| Spec version | 1.1, 2026-11-04 (data levels P1-P2; 1.0 first spec; written from the code, README files and the live service) |
 | Applies to | skywalker v0.35.0 (pyproject; git tags stop at v0.34.3), MCP `tools_version` 2 |
 | Status | CLI: built, used by RC staff. MCP server: live on Cloud Run as an internal pilot. A2A agent: live in the same service. |
 | Owner | Chuck Forsyth (Research Computing). Authors: Chuck and Hermes. |
@@ -84,14 +84,15 @@ Bump `tools_version` in server.py when a tool is added, removed or changes shape
 ## 8. Data handling
 
 Skywalker reads billing export, IAM policy, asset inventory, audit logs, Recommender and SCC
-findings. It stores only sealed tokens, focus settings and short-lived per-person caches. No data
-level policy is written for the MCP yet (open item). Contract dollar figures are never added to
+findings. It stores only sealed tokens, focus settings and short-lived per-person caches.
+Data levels (Chuck, 2026-11-04): **P1-P2 only.** Skywalker answers carry billing, IAM, inventory
+and audit metadata at P2; it is not a channel for P3/P4 project contents. Contract dollar figures are never added to
 outputs; spend comes from the billing export.
 
 ## 9. Open items
 
 1. Tag v0.35.0 (code is at 0.35.0; the latest tag is v0.34.3).
-2. Write a data-level statement for the MCP and A2A answers (what level the outputs carry).
+2. ~~Data-level statement~~ Done 2026-11-04: P1-P2 (section 8).
 3. The CLI README still calls the tool "Production" and quotes a sample savings figure; align with
    the MCP pilot status when the README is next touched.
 4. Remove the deprecated `/sse` transport (it was to stay "for one release").
@@ -99,3 +100,4 @@ outputs; spend comes from the billing export.
 ## Change log
 
 - 2026-11-04 1.0: first spec, from the code, both READMEs, deploy.sh and the live service.
+- 2026-11-04 1.1: data levels set to P1-P2 (Chuck).
