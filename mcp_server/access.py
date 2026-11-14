@@ -44,7 +44,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ContentBlock, TextContent, ToolAnnotations
 from mcp.types import Tool as MCPTool
 from store import SealedStore
-from users import RANK, role_at_least
+from users import RANK, ProjectUsage, Users, role_at_least
 
 from skywalker.intel import Gcp, GcpError
 
@@ -100,6 +100,8 @@ class GuardedMCP(FastMCP):
         self.google_tokens: GoogleTokens | None = None  # set by app.build_app
         self.quota_project: str | None = None
         self.store: SealedStore | None = None  # set by app.build_app (focus)
+        self.users: Users | None = None  # set by app.build_app (allocations)
+        self.project_usage: ProjectUsage = ProjectUsage()
 
     def caller_gcp(self, ident: Identity) -> Gcp:
         """Google Cloud access as this caller (their own token, refreshed on demand)."""

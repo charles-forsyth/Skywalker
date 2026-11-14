@@ -19,8 +19,8 @@ jobs:
         run: uv lock --check
       - name: No private settings or keys in the repo
         run: |
-          ! git grep -nIE 'AIza[0-9A-Za-z_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY|ghp_[0-9A-Za-z]{30,}|GOCSPX-' -- . ':!uv.lock'
-          ! git grep -nIE '01B8C7-D13B5E|gcp_billing_export_v1_01B8C7' -- mcp_server src/skywalker/intel tests/mcp
+          (! git grep -nIE 'AIza[0-9A-Za-z_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY|ghp_[0-9A-Za-z]{30,}|GOCSPX[-]' -- . ':!uv.lock')
+          (! git grep -nIE '01B8C7-D13B5E|gcp_billing_export_v1_01B8C7' -- mcp_server src/skywalker/intel tests/mcp)
       - name: Run Ruff
         run: uv run --extra dev ruff check .
       - name: Run Ruff Format

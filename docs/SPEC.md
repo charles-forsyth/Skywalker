@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Spec version | 1.1, 2026-11-04 (data levels P1-P2; 1.0 first spec; written from the code, README files and the live service) |
+| Spec version | 1.2, 2026-11-14 (Atrium system review hardening: D2-D4, OAuth grant-family revocation, PUBLIC_URL, bucket IAM, landing page; 1.1 data levels P1-P2; 1.0 first spec) |
 | Applies to | skywalker v0.35.0 (pyproject; git tags stop at v0.34.3), MCP `tools_version` 2 |
-| Status | CLI: built, used by RC staff. MCP server: live on Cloud Run as an internal pilot. A2A agent: live in the same service. |
+| Status | CLI: built, used by RC staff. MCP server: live on Cloud Run as an internal pilot. A2A agent: live in the same service (`staff`+ by default). |
 | Owner | Chuck Forsyth (Research Computing). Authors: Chuck and Hermes. |
 | Repo | https://github.com/charles-forsyth/Skywalker (public, MIT) |
 | Nexus | project record "Skywalker MCP Server" (5cc9951a) |
@@ -20,7 +20,8 @@ GCP projects UCR Research Computing runs). It has two front ends that share one 
 - **MCP server** (`mcp_server/`): 21 read-only tools over `skywalker.intel`, signed in with Google,
   acting as the caller. Clients: Hermes (`skywalker`), Atrium's cloud agent, Telescope (Mac), Ultra.
 - **A2A agent** (`mcp_server/agent.py`, `/a2a/`): Gemini agent over the same tools for Gemini
-  Enterprise, with the same role checks and audit.
+  Enterprise, with the same role checks and audit, gated to `staff` by default
+  (`SKYWALKER_A2A_MIN_ROLE`, default `staff`) so researchers use Atrium `/a2a/cloud`.
 
 ## 2. Layout
 
@@ -30,7 +31,7 @@ GCP projects UCR Research Computing runs). It has two front ends that share one 
 | `src/skywalker/modes/` | CLI modes: audit, monitor, zombies, modelusage, apikeys, billing, fix |
 | `src/skywalker/intel/` | the MCP library: gcp (read-only HTTP gate), billing, iam, inventory, ops, overview, projects, recommend, security |
 | `mcp_server/` | server.py (tools), auth.py (OAuth 2.1), access.py, scope.py, users.py, store.py, cache.py, agent.py, app.py, deploy.sh, Dockerfile |
-| `tests/` | 21 files, about 134 tests |
+| `tests/` | 21 files, 174 tests (52 CLI + 122 MCP) and 50 security mutation guards |
 | `docs/` | GitHub Pages showcase (index.html) and this spec |
 
 ## 3. Read-only guarantee (MCP and A2A)
@@ -46,16 +47,32 @@ GCP projects UCR Research Computing runs). It has two front ends that share one 
 ## 4. Auth and access (same stack as Nexus MCP and ursa-bifrost)
 
 - OAuth 2.1 + PKCE S256 with dynamic registration; Google sign-in limited to the `users.yaml` domain
-  (`hd` checked on the request and in the ID token). Unknown client ids are refused.
+  (`hd` checked on the request and in the ID token). Unknown client ids are refused. Canonical public
+  URL is pinned via `SKYWALKER_PUBLIC_URL` / `PUBLIC_URL`; `X-Forwarded-Host` is never trusted.
+- Explicit CSRF-protected `POST /authorize` consent confirmation. Seen-consent cookies
+  (`skywalker_mcp_seen_<sha256>`, `Path=/authorize`, 90-day TTL) are scoped per
+  `(client_id, redirect_hostname)` and apply only to pre-registered `program_clients`; dynamically
+  registered RFC 7591 clients never skip the consent screen.
 - `users.yaml` in Secret Manager, re-read on change. Roles `read` < `staff` < `admin`, checked on
   every call; the tool list is filtered per caller.
 - Project scope (`scope.py`): a `read` user may ask only about the projects listed for them (exact
   ids or `prefix*`); staff and admins may ask about any project their Google account can see.
   `skywalker_focus` sets the caller's default project (staff may focus on `all`).
-- Google refresh tokens sealed with AES-256-GCM in the store on a Cloud Storage volume; rotating
-  refresh tokens bound to the client; `/revoke` (RFC 7009); `/signout` revokes the Google grant.
-- One JSON audit line per sign-in and tool call; per-person and per-client rate limits; in-flight
-  cap; program clients with a role ceiling. Answers cached per person and client for 120 s.
+- Researcher allocation fallback (D4): `users.yaml` supports optional `project_allocations` and
+  per-user `allocations`, paired with an optional pre-aggregated monthly project usage file
+  (`SKYWALKER_PROJECT_USAGE_FILE`), strictly gated by `project_allowed`. When central Cloud Billing
+  or BigQuery returns 403 for a `read` caller on `skywalker_overview`, `skywalker_budget`, or
+  `skywalker_spend` (default month-to-date), Skywalker synthesizes the caller's project allocation
+  and usage summary and clears `unavailable["budget"]` / `unavailable["spend"]` when satisfied.
+- Google refresh tokens sealed with AES-256-GCM in the store on a Cloud Storage volume; OAuth
+  tokens bound to a `grant_id` family with 90-day `GRANT_MAX_AGE`, required `client_id` match on
+  refresh, replay detection (`refreshused`) revoking the entire grant family, full-grant `/revoke`
+  (RFC 7009), and `/signout` revoking the Google grant. `deploy.sh` backs up bucket IAM JSON and
+  strips default `projectViewer`/`projectEditor`/`projectOwner` `legacyBucket*`/`legacyObject*`
+  bindings on the state bucket.
+- One JSON audit line per sign-in and tool call; per-person and per-client rate limits (keyed on the
+  last `X-Forwarded-For` hop for public OAuth endpoints); in-flight cap; program clients with a role
+  ceiling; CORS restricted to `/.well-known/*`. Answers cached per person and client for 120 s.
 
 ## 5. Tools (21)
 
@@ -66,9 +83,12 @@ Bump `tools_version` in server.py when a tool is added, removed or changes shape
 
 ## 6. Endpoints
 
+`GET /` renders an RC-styled public landing page for browsers (`Accept: text/html`, with optional
+`ATRIUM_URL` link) while keeping the 401 `WWW-Authenticate` challenge for programmatic probes;
 `/mcp` (Streamable HTTP, stateless), `/sse` + `/messages/` (legacy), OAuth discovery and
-`/register` `/authorize` `/oauth/callback` `/token` `/revoke`, `/whoami`, `/signout`, `/health`
-(rev + tools_version), `/a2a/` and the public agent card at `/a2a/.well-known/agent-card.json`.
+`/register` `/authorize` (GET/POST) `/oauth/callback` `/token` `/revoke`, `/whoami`, `/signout`,
+`/health` (rev + tools_version), `/a2a/` (`staff`+ by default via `SKYWALKER_A2A_MIN_ROLE`) and the
+public agent card at `/a2a/.well-known/agent-card.json`.
 
 ## 7. Deployment (as of 2026-11-04)
 
@@ -93,11 +113,11 @@ outputs; spend comes from the billing export.
 
 1. Tag v0.35.0 (code is at 0.35.0; the latest tag is v0.34.3).
 2. ~~Data-level statement~~ Done 2026-11-04: P1-P2 (section 8).
-3. The CLI README still calls the tool "Production" and quotes a sample savings figure; align with
-   the MCP pilot status when the README is next touched.
+3. ~~CLI README status & MCP overview alignment~~ Done 2026-11-14: README covers CLI + MCP pilot and security checks.
 4. Remove the deprecated `/sse` transport (it was to stay "for one release").
 
 ## Change log
 
 - 2026-11-04 1.0: first spec, from the code, both READMEs, deploy.sh and the live service.
 - 2026-11-04 1.1: data levels set to P1-P2 (Chuck).
+- 2026-11-14 1.2: Atrium whole-system review hardening -- D4 researcher project allocation and usage snapshot fallback (`project_allocations`/`allocations`, `SKYWALKER_PROJECT_USAGE_FILE`) gated by `project_allowed`; D3 `/a2a/` staff gate (`SKYWALKER_A2A_MIN_ROLE`, default `staff`); D2 scoped `skywalker_mcp_seen` cookie (`Path=/authorize`, 90d) and CSRF-protected `POST /authorize` confirmation required on every dynamic RFC 7591 client; pinned `SKYWALKER_PUBLIC_URL` (`X-Forwarded-Host` ignored); state-bucket legacy IAM lockdown in `deploy.sh`; RC-styled browser landing page at `GET /`; OAuth `grant_id` family replay revocation, full-grant `/revoke`, 90-day `GRANT_MAX_AGE`, required `client_id` on refresh, last-hop `X-Forwarded-For` IP rate limiting, `/.well-known/*`-only CORS, and 50 security mutation guards.

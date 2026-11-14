@@ -18,6 +18,7 @@ from conftest import (
     FakeGoogle,
     audit_lines,
     call,
+    confirm_authorize,
     payload,
     pkce,
     register,
@@ -515,9 +516,7 @@ def test_code_needs_pkce_and_is_single_use(env: dict[str, Any]) -> None:
         },
         follow_redirects=False,
     )
-    google_url = (
-        r.text.split('class="b" href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
-    )
+    google_url = confirm_authorize(c, r)
     state = urllib.parse.parse_qs(urllib.parse.urlsplit(google_url).query)["state"][0]
     env["google"].claims = {
         "email": "forsythc@ucr.edu",
@@ -608,7 +607,7 @@ def test_google_request_has_no_incremental_auth(env: dict[str, Any]) -> None:
         },
         follow_redirects=False,
     )
-    url = r.text.split('class="b" href="', 1)[1].split('"', 1)[0].replace("&amp;", "&")
+    url = confirm_authorize(c, r)
     q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
     assert "include_granted_scopes" not in q
     assert q["scope"] == [f"openid email {auth.GCP_SCOPE}"]
@@ -644,3 +643,511 @@ def test_broad_sign_in_token_is_not_used(env: dict[str, Any]) -> None:
     sign_in(env, "forsythc@ucr.edu")
     tok = env["server"].google_tokens.access_token("forsythc@ucr.edu")
     assert tok != "ga-forsythc@ucr.edu-0" and g.refreshes == ["gr-forsythc@ucr.edu"]
+
+
+# --- OAuth hardening, PUBLIC_URL, landing page, CORS, deploy bucket IAM ---------------
+
+
+def test_consent_cookie_scoped_and_dynamic_clients_never_skip_consent(
+    env: dict[str, Any],
+) -> None:
+    import hashlib
+    import re
+
+    c = env["client"]
+    _, challenge = pkce()
+    # 1. Pre-registered program client: first visit renders 200 POST form; confirming
+    # sets a scoped 90-day Path=/authorize cookie and second visit auto-redirects.
+    r1 = c.get(
+        "/authorize",
+        params={
+            "client_id": "skywalker-ultra",
+            "redirect_uri": "http://127.0.0.1:41234/callback",
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    assert (
+        r1.status_code == 200 and '<form method="post" action="/authorize">' in r1.text
+    )
+    m_consent = re.search(r'name="consent"\s+value="([^"]+)"', r1.text)
+    m_csrf = re.search(r'name="csrf"\s+value="([^"]+)"', r1.text)
+    assert m_consent and m_csrf
+    r_post = c.post(
+        "/authorize",
+        data={"consent": m_consent.group(1), "csrf": m_csrf.group(1)},
+        follow_redirects=False,
+    )
+    assert r_post.status_code == 302
+    want_cookie = (
+        "skywalker_mcp_seen_"
+        + hashlib.sha256(b"skywalker-ultra|127.0.0.1").hexdigest()[:16]
+    )
+    set_cookies = r_post.headers.get_list("set-cookie")
+    seen_hdr = next((h for h in set_cookies if h.startswith(want_cookie + "=")), "")
+    assert seen_hdr, set_cookies
+    assert "Path=/authorize" in seen_hdr and f"Max-Age={90 * 86400}" in seen_hdr
+
+    # Second visit for the same (program_client, redirect_hostname) skips consent (302).
+    r2 = c.get(
+        "/authorize",
+        params={
+            "client_id": "skywalker-ultra",
+            "redirect_uri": "http://127.0.0.1:55555/callback",
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    assert r2.status_code == 302
+
+    # Different program client does NOT inherit skywalker-ultra's consent cookie.
+    r_other_prog = c.get(
+        "/authorize",
+        params={
+            "client_id": "skywalker-gemini-enterprise",
+            "redirect_uri": "https://vertexaisearch.cloud.google.com/oauth-redirect",
+            "response_type": "code",
+        },
+        follow_redirects=False,
+    )
+    assert r_other_prog.status_code == 200
+
+    # 2. Dynamically registered RFC 7591 client NEVER sets or honors seen cookie.
+    dyn_id = register(c)
+    sign_in(env, "staffer@ucr.edu", client_id=dyn_id)
+    # Even if a forged seen cookie for dyn_id is sent, GET /authorize still returns 200!
+    dyn_seen = (
+        "skywalker_mcp_seen_"
+        + hashlib.sha256(f"{dyn_id}|127.0.0.1".encode()).hexdigest()[:16]
+    )
+    c.cookies.set(dyn_seen, "1")
+    r_dyn = c.get(
+        "/authorize",
+        params={
+            "client_id": dyn_id,
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    assert r_dyn.status_code == 200 and "registered dynamically" in r_dyn.text
+
+
+def test_authorize_post_csrf_and_origin_guards(env: dict[str, Any]) -> None:
+    import re
+
+    c = env["client"]
+    cid = register(c)
+    _, challenge = pkce()
+    r = c.get(
+        "/authorize",
+        params={
+            "client_id": cid,
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    consent = re.search(r'name="consent"\s+value="([^"]+)"', r.text).group(1)  # type: ignore[union-attr]
+    csrf = re.search(r'name="csrf"\s+value="([^"]+)"', r.text).group(1)  # type: ignore[union-attr]
+    # Cross-origin POST rejected before consuming consent
+    bad_origin = c.post(
+        "/authorize",
+        data={"consent": consent, "csrf": csrf},
+        headers={"Origin": "https://evil.example"},
+        follow_redirects=False,
+    )
+    assert bad_origin.status_code == 403
+    # Wrong CSRF token rejected (consumes consent so attacker cannot retry)
+    bad_csrf = c.post(
+        "/authorize",
+        data={"consent": consent, "csrf": "wrong-csrf"},
+        follow_redirects=False,
+    )
+    assert bad_csrf.status_code == 403
+    # Consumed consent cannot be replayed
+    replay = c.post(
+        "/authorize",
+        data={"consent": consent, "csrf": csrf},
+        follow_redirects=False,
+    )
+    assert replay.status_code == 400
+
+
+def test_public_url_pinned_and_x_forwarded_host_ignored(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    c = env["client"]
+    # Even without SKYWALKER_PUBLIC_URL, X-Forwarded-Host is never trusted.
+    meta = c.get(
+        "/.well-known/oauth-authorization-server",
+        headers={"X-Forwarded-Host": "evil.example"},
+    ).json()
+    assert "evil.example" not in str(meta) and meta["issuer"] == BASE
+
+    # When SKYWALKER_PUBLIC_URL is set, both Host and X-Forwarded-Host are ignored.
+    monkeypatch.setenv("SKYWALKER_PUBLIC_URL", "https://skywalker.example.edu/")
+    meta2 = c.get(
+        "/.well-known/oauth-authorization-server",
+        headers={"Host": "spoofed.example", "X-Forwarded-Host": "evil.example"},
+    ).json()
+    assert meta2["issuer"] == "https://skywalker.example.edu"
+    assert meta2["authorization_endpoint"] == "https://skywalker.example.edu/authorize"
+    chal = c.post(
+        "/mcp",
+        headers={
+            "Host": "spoofed.example",
+            "X-Forwarded-Host": "evil.example",
+            "Accept": "application/json, text/event-stream",
+        },
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+    )
+    assert (
+        chal.status_code == 401
+        and "https://skywalker.example.edu/.well-known/oauth-protected-resource"
+        in chal.headers["www-authenticate"]
+    )
+
+
+def test_browser_landing_page_at_root_and_programmatic_root_unchanged(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    c = env["client"]
+    # Programmatic non-HTML GET / without Bearer token keeps existing 401 challenge.
+    prog = c.get("/", headers={"Accept": "application/json"})
+    assert prog.status_code == 401 and "WWW-Authenticate" in prog.headers
+
+    # Browser GET / (Accept: text/html) renders public RC-styled landing page (200).
+    html_r = c.get(
+        "/", headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9"}
+    )
+    assert html_r.status_code == 200
+    assert html_r.headers["content-type"].startswith("text/html")
+    assert "Skywalker MCP server" in html_r.text and f"{BASE}/mcp" in html_r.text
+    assert ">Atrium<" not in html_r.text
+
+    # When ATRIUM_URL is configured, the landing page links to Atrium.
+    monkeypatch.setenv("ATRIUM_URL", "https://atrium.example.edu/")
+    html_atrium = c.get("/", headers={"Accept": "text/html"})
+    assert html_atrium.status_code == 200
+    assert 'href="https://atrium.example.edu/"' in html_atrium.text
+
+
+def test_refresh_replay_revokes_entire_grant_family(env: dict[str, Any]) -> None:
+    c = env["client"]
+    g1 = sign_in(env, "staffer@ucr.edu")
+    g2 = sign_in(env, "staffer@ucr.edu")
+    # Rotate g1 once -> (at2, rt2)
+    rot = c.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": g1["refresh_token"],
+            "client_id": g1["client_id"],
+        },
+    )
+    assert rot.status_code == 200
+    g1_next = rot.json()
+    assert (
+        c.get(
+            "/whoami", headers={"Authorization": f"Bearer {g1_next['access_token']}"}
+        ).status_code
+        == 200
+    )
+
+    # Replaying the already-used g1["refresh_token"] kills the whole g1 grant family!
+    replay = c.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": g1["refresh_token"],
+            "client_id": g1["client_id"],
+        },
+    )
+    assert replay.status_code == 400
+    assert (
+        c.get(
+            "/whoami", headers={"Authorization": f"Bearer {g1_next['access_token']}"}
+        ).status_code
+        == 401
+    )
+    assert (
+        c.post(
+            "/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": g1_next["refresh_token"],
+                "client_id": g1["client_id"],
+            },
+        ).status_code
+        == 400
+    )
+    # Separate grant g2 is unaffected.
+    assert (
+        c.get(
+            "/whoami", headers={"Authorization": f"Bearer {g2['access_token']}"}
+        ).status_code
+        == 200
+    )
+
+
+def test_revoke_access_token_revokes_refresh_token_too(env: dict[str, Any]) -> None:
+    c = env["client"]
+    tok = sign_in(env, "staffer@ucr.edu")
+    r = c.post("/revoke", data={"token": tok["access_token"]})
+    assert r.status_code == 200
+    assert rpc(c, tok["access_token"], "tools/list").status_code == 401
+    ref = c.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": tok["refresh_token"],
+            "client_id": tok["client_id"],
+        },
+    )
+    assert ref.status_code == 400
+
+
+def test_grant_max_age_90_days_enforced(env: dict[str, Any]) -> None:
+    c = env["client"]
+    srv: auth.AuthServer = env["server"]
+    tok = sign_in(env, "staffer@ucr.edu")
+    old_start = time.time() - auth.GRANT_MAX_AGE - 60
+    ah = auth._hash(tok["access_token"])
+    rh = auth._hash(tok["refresh_token"])
+    arec = srv.store.get("access", ah)
+    rrec = srv.store.get("refresh", rh)
+    assert arec is not None and rrec is not None
+    srv.store.put("access", ah, {**arec, "grant_start": old_start})
+    srv._access[ah] = {**arec, "grant_start": old_start}
+    srv.store.put("refresh", rh, {**rrec, "grant_start": old_start})
+    assert rpc(c, tok["access_token"], "tools/list").status_code == 401
+    ref = c.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": tok["refresh_token"],
+            "client_id": tok["client_id"],
+        },
+    )
+    assert ref.status_code == 400 and "expired" in ref.json()["error_description"]
+
+
+def test_refresh_requires_client_id(env: dict[str, Any]) -> None:
+    c = env["client"]
+    tok = sign_in(env, "staffer@ucr.edu")
+    missing = c.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": tok["refresh_token"],
+        },
+    )
+    assert missing.status_code == 400
+    # Valid refresh with client_id still works because unauthenticated attempt did not rotate it.
+    ok = c.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": tok["refresh_token"],
+            "client_id": tok["client_id"],
+        },
+    )
+    assert ok.status_code == 200
+
+
+def test_client_ip_uses_last_x_forwarded_for_hop(env: dict[str, Any]) -> None:
+    c = env["client"]
+    for i in range(10):
+        r = c.post(
+            "/register",
+            json={"redirect_uris": [REDIRECT]},
+            headers={"X-Forwarded-For": f"198.51.100.{i}, 203.0.113.77"},
+        )
+        assert r.status_code == 201
+    # Rotating the first XFF IP does not bypass the rate limit on the real last-hop IP.
+    blocked = c.post(
+        "/register",
+        json={"redirect_uris": [REDIRECT]},
+        headers={"X-Forwarded-For": "198.51.100.250, 203.0.113.77"},
+    )
+    assert blocked.status_code == 429
+    # A different last-hop IP has its own bucket.
+    other = c.post(
+        "/register",
+        json={"redirect_uris": [REDIRECT]},
+        headers={"X-Forwarded-For": "198.51.100.250, 203.0.113.88"},
+    )
+    assert other.status_code == 201
+
+
+def test_cors_restricted_to_well_known_only(env: dict[str, Any]) -> None:
+    c = env["client"]
+    tok = sign_in(env, "staffer@ucr.edu")["access_token"]
+    wk = c.get(
+        "/.well-known/oauth-authorization-server",
+        headers={"Origin": "https://app.example.edu"},
+    )
+    assert wk.headers.get("access-control-allow-origin") == "*"
+    for method, path, hdrs in (
+        (
+            "GET",
+            "/whoami",
+            {"Origin": "https://evil.example", "Authorization": f"Bearer {tok}"},
+        ),
+        (
+            "POST",
+            "/mcp",
+            {
+                "Origin": "https://evil.example",
+                "Authorization": f"Bearer {tok}",
+                "Accept": "application/json, text/event-stream",
+            },
+        ),
+        (
+            "POST",
+            "/signout",
+            {"Origin": "https://evil.example"},
+        ),
+    ):
+        resp = c.request(method, path, headers=hdrs)
+        assert "access-control-allow-origin" not in resp.headers, path
+
+
+def test_users_example_yaml_parses_with_allocations() -> None:
+    from users import parse
+
+    example = (
+        Path(__file__).resolve().parents[2] / "mcp_server/users.example.yaml"
+    ).read_text()
+    cfg = parse(example)
+    assert cfg.domain == "example.edu" and cfg.project_allocations == {}
+    uncommented = example.replace(
+        "project_allocations: {}\n#  lab-bob-project: 1000.0",
+        "project_allocations:\n  lab-bob-project: 1000.0",
+    )
+    cfg2 = parse(uncommented)
+    assert cfg2.project_allocations == {"lab-bob-project": 1000.0}
+
+
+def test_deploy_script_syntax_and_legacy_bucket_iam_lockdown(tmp_path: Path) -> None:
+    import json
+    import subprocess
+
+    deploy_sh = Path(__file__).resolve().parents[2] / "mcp_server/deploy.sh"
+    assert subprocess.run(["bash", "-n", str(deploy_sh)], check=False).returncode == 0
+    text = deploy_sh.read_text()
+    assert "SKYWALKER_PUBLIC_URL=" in text
+    assert "roles/storage.legacyBucket" in text and "roles/storage.legacyObject" in text
+
+    # Extract and exercise the bucket IAM lockdown block against a fake gcloud binary.
+    start = text.index("# Strip default legacy projectViewer/Editor/Owner bindings")
+    end = text.index("# --- secrets ---")
+    block = text[start:end]
+
+    policy_file = tmp_path / "policy.json"
+    policy_file.write_text(
+        json.dumps(
+            {
+                "bindings": [
+                    {
+                        "role": "roles/storage.objectUser",
+                        "members": [
+                            "serviceAccount:skywalker-mcp@example-rc-proj.iam.gserviceaccount.com"
+                        ],
+                    },
+                    {
+                        "role": "roles/storage.legacyBucketReader",
+                        "members": ["projectViewer:example-rc-proj"],
+                    },
+                    {
+                        "role": "roles/storage.legacyObjectReader",
+                        "members": [
+                            "projectViewer:example-rc-proj",
+                            "projectEditor:example-rc-proj",
+                        ],
+                    },
+                    {
+                        "role": "roles/storage.legacyBucketOwner",
+                        "members": [
+                            "projectEditor:example-rc-proj",
+                            "projectOwner:example-rc-proj",
+                        ],
+                    },
+                ]
+            }
+        )
+    )
+    removed_log = tmp_path / "removed.log"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    gcloud = fake_bin / "gcloud"
+    gcloud.write_text(
+        f"""#!/usr/bin/env python3
+import json, pathlib, sys
+p = pathlib.Path({str(policy_file)!r})
+log = pathlib.Path({str(removed_log)!r})
+args = sys.argv[1:]
+if args[:3] == ["storage", "buckets", "get-iam-policy"]:
+    print(p.read_text())
+elif args[:3] == ["storage", "buckets", "remove-iam-policy-binding"]:
+    member = args[args.index("--member") + 1]
+    role = args[args.index("--role") + 1]
+    with log.open("a") as f:
+        f.write(f"{{role}} {{member}}\\n")
+    data = json.loads(p.read_text())
+    for b in data.get("bindings", []):
+        if b["role"] == role and member in b.get("members", []):
+            b["members"].remove(member)
+    data["bindings"] = [b for b in data.get("bindings", []) if b.get("members")]
+    p.write_text(json.dumps(data))
+else:
+    sys.exit(2)
+"""
+    )
+    gcloud.chmod(0o755)
+    backups = tmp_path / "backups"
+    run_env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "BUCKET": "example-rc-proj-skywalker-mcp-data",
+        "PROJECT": "example-rc-proj",
+        "BACKUP_DIR": str(backups),
+    }
+    r1 = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", block],
+        env=run_env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "saved gs://example-rc-proj-skywalker-mcp-data IAM backup" in r1.stdout
+    saved = list(backups.glob("*.json"))
+    assert len(saved) == 1 and "legacyBucketOwner" in saved[0].read_text()
+    after = json.loads(policy_file.read_text())
+    assert after["bindings"] == [
+        {
+            "role": "roles/storage.objectUser",
+            "members": [
+                "serviceAccount:skywalker-mcp@example-rc-proj.iam.gserviceaccount.com"
+            ],
+        }
+    ]
+    # Second run is idempotent and writes no extra backup.
+    r2 = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", block],
+        env=run_env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "has no legacy projectViewer/Editor/Owner bindings" in r2.stdout
+    assert len(list(backups.glob("*.json"))) == 1

@@ -186,6 +186,29 @@ def register(c: TestClient, redirect: str = REDIRECT) -> str:
     return str(r.json()["client_id"])
 
 
+def confirm_authorize(c: TestClient, r: Any) -> str:
+    """Submit the POST /authorize consent form from a 200 consent page; return redirect Location."""
+    assert r.status_code == 200, r.text
+    assert "Continue with" in r.text
+    m_consent = re.search(r'name="consent"\s+value="([^"]+)"', r.text)
+    m_csrf = re.search(r'name="csrf"\s+value="([^"]+)"', r.text)
+    assert m_consent and m_csrf, r.text
+    r2 = c.post(
+        "/authorize",
+        data={
+            "consent": html_unescape(m_consent.group(1)),
+            "csrf": html_unescape(m_csrf.group(1)),
+        },
+        follow_redirects=False,
+    )
+    assert r2.status_code == 302, r2.text
+    return str(r2.headers["location"])
+
+
+def html_unescape(s: str) -> str:
+    return s.replace("&amp;", "&").replace("&quot;", '"')
+
+
 def _authorize(c: TestClient, client_id: str, redirect: str, challenge: str) -> str:
     r = c.get(
         "/authorize",
@@ -201,12 +224,7 @@ def _authorize(c: TestClient, client_id: str, redirect: str, challenge: str) -> 
     )
     assert r.status_code in (200, 302), r.text
     if r.status_code == 200:
-        assert "Continue with" in r.text
-        return (
-            r.text.split('class="b" href="', 1)[1]
-            .split('"', 1)[0]
-            .replace("&amp;", "&")
-        )
+        return confirm_authorize(c, r)
     return str(r.headers["location"])
 
 
@@ -225,7 +243,7 @@ def sign_in(
     google_url = _authorize(c, client_id, redirect, challenge)
     for _ in range(2):  # at most one consent retry
         g = urllib.parse.parse_qs(urllib.parse.urlsplit(google_url).query)
-        assert g["hd"] == ["ucr.edu"]
+        assert g["hd"] == [e["server"].users.domain]
         assert auth.GCP_SCOPE in g["scope"][0] and g["access_type"] == ["offline"]
         if "consent" in g["prompt"][0]:
             e["google"].consent_next = True

@@ -207,14 +207,20 @@ MUTATIONS = [
     ),
     (
         "mcp_server/auth.py",
-        '            if client_id and client_id != rec["client_id"]:\n                return _oauth_error(\n                    "invalid_grant", "refresh token belongs',
-        '            if False:\n                return _oauth_error(\n                    "invalid_grant", "refresh token belongs',
+        '                if not client_id or client_id != rec["client_id"]:\n                    return _oauth_error(\n                        "invalid_grant", "refresh token belongs',
+        '                if False:\n                    return _oauth_error(\n                        "invalid_grant", "refresh token belongs',
         "refresh bound to client",
     ),
     (
         "mcp_server/auth.py",
-        '            if self.store.pop("refresh", _hash(rt)) is None:',
-        '            if self.store.get("refresh", _hash(rt)) is None:',
+        '                if not client_id or client_id != rec["client_id"]:',
+        '                if client_id and client_id != rec["client_id"]:',
+        "refresh requires client_id",
+    ),
+    (
+        "mcp_server/auth.py",
+        '                if self.store.pop("refresh", _hash(rt)) is None:',
+        '                if self.store.get("refresh", _hash(rt)) is None:',
         "refresh rotation",
     ),
     (
@@ -240,6 +246,78 @@ MUTATIONS = [
         '                if rec.get("email") == ident.email:',
         "                if True:",
         "signout ends only the caller's sessions",
+    ),
+    (
+        "mcp_server/users.py",
+        '    if not role_at_least(role, "staff") and not project_allowed(allowed_projects, norm):',
+        "    if False:",
+        "researcher fallback gated by project_allowed",
+    ),
+    (
+        "mcp_server/agent.py",
+        "        needed = min_role or a2a_min_role()\n        if not role_at_least(ident.role, needed):",
+        "        needed = min_role or a2a_min_role()\n        if False:",
+        "A2A endpoint gated to staff by default",
+    ),
+    (
+        "mcp_server/auth.py",
+        '        if client.get("program") and request.cookies.get(seen_name) == "1":',
+        '        if request.cookies.get(seen_name) == "1":',
+        "dynamic clients never skip OAuth consent",
+    ),
+    (
+        "mcp_server/auth.py",
+        '    digest = hashlib.sha256(f"{client_id}|{host}".encode()).hexdigest()[:16]',
+        '    digest = hashlib.sha256(b"global").hexdigest()[:16]',
+        "seen cookie scoped per client and host",
+    ),
+    (
+        "mcp_server/auth.py",
+        "            or not secrets.compare_digest(form_csrf, want_csrf)\n        ):",
+        "            and False\n        ):",
+        "POST /authorize CSRF session checked",
+    ),
+    (
+        "mcp_server/auth.py",
+        '        if origin and origin != base.rstrip("/"):',
+        "        if False:",
+        "POST /authorize cross-origin Origin refused",
+    ),
+    (
+        "mcp_server/auth.py",
+        "        pub = _canonical_public_url(self.public_url)\n        if pub:\n            return pub",
+        "        pub = _canonical_public_url(self.public_url)\n        if False:\n            return pub",
+        "canonical PUBLIC_URL pinned",
+    ),
+    (
+        "mcp_server/auth.py",
+        '                    used = self.store.get("refreshused", _hash(rt))\n                    if used is not None:',
+        '                    used = self.store.get("refreshused", _hash(rt))\n                    if False:',
+        "refresh replay revokes grant family",
+    ),
+    (
+        "mcp_server/auth.py",
+        '        if rec and rec.get("grant_id"):\n            self._revoke_grant(',
+        "        if False:\n            self._revoke_grant(",
+        "revoke ends entire grant family",
+    ),
+    (
+        "mcp_server/auth.py",
+        "isinstance(gstart, (int, float)) and time.time() - gstart > GRANT_MAX_AGE",
+        "False",
+        "90-day grant max age enforced",
+    ),
+    (
+        "mcp_server/auth.py",
+        "        if parts:\n            return parts[-1]",
+        "        if parts:\n            return parts[0]",
+        "last X-Forwarded-For hop used for client IP",
+    ),
+    (
+        "mcp_server/app.py",
+        '            if path.startswith("/.well-known/") or path.startswith("/a2a/.well-known/"):',
+        "            if True:",
+        "CORS restricted to /.well-known/*",
     ),
 ]
 
