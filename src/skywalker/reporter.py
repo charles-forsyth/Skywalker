@@ -4,7 +4,11 @@ from typing import Any, Literal
 
 import humanize
 import jinja2
-from weasyprint import HTML
+
+try:
+    from weasyprint import HTML
+except OSError:
+    HTML = None
 
 
 def generate_compliance_report(
@@ -47,5 +51,9 @@ def generate_compliance_report(
     if output_format == "html":
         Path(output_path).write_text(html_content, encoding="utf-8")
     else:
+        if HTML is None:
+            raise RuntimeError(
+                "PDF generation requires WeasyPrint system libraries (pango/gobject)"
+            )
         # Generate PDF
         HTML(string=html_content).write_pdf(output_path)

@@ -8,11 +8,12 @@ note, never a failed briefing.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from . import billing, iam, inventory, ops, projects, recommend, security
 from .gcp import Gcp, GcpError
-from .util import IntelConfig, clamp, iso, now_utc, project_id, sections
+from .util import IntelConfig, clamp, iso, now_utc, period, project_id, r2, sections
 
 ASSET = "https://cloudasset.googleapis.com/v1"
 
@@ -75,7 +76,7 @@ def _findings(s: dict[str, Any]) -> list[dict[str, str]]:
                 "budget",
                 f"budget '{b['name']}' cap ${b['amount']:,.0f} is far above use (alerts effectively off)",
             )
-        if not b.get("pubsub_topic"):
+        if not b.get("pubsub_topic") and b.get("source") != "allocation":
             add(
                 "info",
                 "budget",
@@ -232,6 +233,133 @@ def overview(
         "for detail use skywalker_spend, skywalker_compute, skywalker_access, skywalker_exposure, "
         "skywalker_recommendations, skywalker_activity; deep=true adds recommendations and SA keys"
     )
+    return out
+
+
+def synthesize_budget(
+    project: str,
+    allocation: float,
+    usage: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Synthesize a single-project budget payload from configured monthly allocation + optional usage snapshot."""
+    pid = project_id(project)
+    _, _, label = period()
+    amt = r2(allocation)
+    has_spend = usage is not None and usage.get("spend_this_month") is not None
+    used: float | None = (
+        r2(usage["spend_this_month"]) if has_spend and usage is not None else None
+    )
+    pct: float | None = None
+    if used is not None:
+        pct = round(used / amt * 100, 1) if amt > 0 else (100.0 if used > 0 else 0.0)
+    d7_raw = usage.get("per_day_7d") if usage is not None else None
+    d7 = r2(d7_raw) if d7_raw is not None else None
+    as_of = str(usage.get("as_of") or "") if usage is not None else ""
+    entry: dict[str, Any] = {
+        "name": f"{pid} monthly allocation",
+        "projects": [pid],
+        "amount": amt,
+        "period": "MONTH",
+        "spend_this_month": used,
+        "spend_basis": "gross",
+        "per_day_7d": d7,
+        "pct": pct,
+        "silenced_cap": False,
+        "source": "allocation",
+        "as_of": as_of or None,
+    }
+    over = 1 if (pct is not None and pct >= 100) else 0
+    warn = 1 if (pct is not None and 75 <= pct < 100) else 0
+    return {
+        "project_id": pid,
+        "month": label,
+        "source": "allocation",
+        "summary": {
+            "budgets": 1,
+            "over_100pct": over,
+            "75_to_100pct": warn,
+            "silenced_high_caps": 0,
+            "projects_with_two_or_more_budgets": [],
+            "without_pubsub_throttle": 0,
+            "unbudgeted_spenders": 0,
+        },
+        "budgets": [entry],
+        "unbudgeted": [],
+        "truncated": False,
+        "note": "configured monthly allocation (central Billing API unavailable for caller)",
+    }
+
+
+def synthesize_spend(project: str, usage: Mapping[str, Any]) -> dict[str, Any]:
+    """Synthesize a single-project month-to-date spend summary from a pre-aggregated usage snapshot."""
+    pid = project_id(project)
+    start, end, label = period()
+    gross = r2(usage.get("spend_this_month"))
+    cred = r2(usage.get("credits_this_month"))
+    net_raw = usage.get("net_this_month")
+    net = r2(net_raw) if net_raw is not None else r2(gross + cred)
+    raw_items = usage.get("items") or []
+    items = list(raw_items) if isinstance(raw_items, list) else []
+    as_of = str(usage.get("as_of") or "")
+    return {
+        "project_id": pid,
+        "window": {"label": label, "start": iso(start), "end": iso(end)},
+        "currency": "USD",
+        "total": {
+            "gross": gross,
+            "credits": cred,
+            "net": net,
+        },
+        "group_by": "service",
+        "items": items,
+        "truncated": False,
+        "source": "usage_snapshot",
+        "as_of": as_of or None,
+        "note": "pre-aggregated monthly project usage snapshot (central billing export unavailable for caller)",
+    }
+
+
+def apply_allocation_fallback(
+    out: dict[str, Any],
+    allocation: float | None = None,
+    usage: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fill missing/403 budget and spend sections in `overview` from configured allocation + usage snapshot."""
+    if allocation is None and usage is None:
+        return out
+    pid = str(out.get("project_id") or "")
+    if not pid:
+        return out
+    unavail_raw = out.get("unavailable")
+    unavail: dict[str, Any] = dict(unavail_raw) if isinstance(unavail_raw, dict) else {}
+    if (unavail.get("project") or {}).get("error") == "permission":
+        return out
+    changed = False
+    bud_err = (unavail.get("budget") or {}).get("error")
+    if (
+        "budget" not in out
+        and allocation is not None
+        and bud_err in ("permission", "invalid", None)
+    ):
+        out["budget"] = synthesize_budget(pid, allocation, usage)
+        unavail.pop("budget", None)
+        changed = True
+    sp_err = (unavail.get("spend") or {}).get("error")
+    if (
+        "spend" not in out
+        and usage is not None
+        and usage.get("spend_this_month") is not None
+        and sp_err in ("permission", "invalid", None)
+    ):
+        out["spend"] = synthesize_spend(pid, usage)
+        unavail.pop("spend", None)
+        changed = True
+    if changed:
+        out["findings"] = _findings(out)
+        if unavail:
+            out["unavailable"] = unavail
+        else:
+            out.pop("unavailable", None)
     return out
 
 

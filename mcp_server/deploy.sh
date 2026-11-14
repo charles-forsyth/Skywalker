@@ -40,8 +40,12 @@ source "$SETTINGS"
 : "${SKYWALKER_BILLING_TABLE:?}" "${SKYWALKER_BILLING_ACCOUNT:?}" "${SKYWALKER_JOB_PROJECT:?}"
 SKYWALKER_FLEET_SCOPES="${SKYWALKER_FLEET_SCOPES:-}"
 SKYWALKER_QUOTA_PROJECT="${SKYWALKER_QUOTA_PROJECT:-$PROJECT}"
-# The A2A agent (Gemini Enterprise). Its card names this URL, so it is fixed here.
+# The A2A agent (Gemini Enterprise) and canonical OAuth base URL (never X-Forwarded-Host).
 SKYWALKER_BASE_URL="${SKYWALKER_BASE_URL:-https://skywalker-mcp-server-dsfh6rrlia-uc.a.run.app}"
+SKYWALKER_PUBLIC_URL="${SKYWALKER_PUBLIC_URL:-$SKYWALKER_BASE_URL}"
+SKYWALKER_A2A_MIN_ROLE="${SKYWALKER_A2A_MIN_ROLE:-staff}"
+SKYWALKER_PROJECT_USAGE_FILE="${SKYWALKER_PROJECT_USAGE_FILE:-}"
+ATRIUM_URL="${ATRIUM_URL:-}"
 SKYWALKER_AGENT_PROJECT="${SKYWALKER_AGENT_PROJECT:-$PROJECT}"
 SKYWALKER_AGENT_MODEL="${SKYWALKER_AGENT_MODEL:-gemini-3.8-flash}"
 
@@ -66,6 +70,44 @@ fi
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
   --member "serviceAccount:$SA" --role roles/storage.objectUser >/dev/null
 echo "ok   $SA can use gs://$BUCKET"
+
+# Strip default legacy projectViewer/Editor/Owner bindings on the sealed state bucket
+# (P2-08 / L1). Save a JSON IAM backup first whenever any legacy binding is removed.
+bucket_policy="$(gcloud storage buckets get-iam-policy "gs://$BUCKET" --format=json)"
+legacy_pairs="$(
+  BUCKET_POLICY="$bucket_policy" PROJECT_ID="$PROJECT" python3 - <<'PY'
+import json
+import os
+
+policy = json.loads(os.environ["BUCKET_POLICY"])
+proj = os.environ["PROJECT_ID"]
+targets = {f"projectViewer:{proj}", f"projectEditor:{proj}", f"projectOwner:{proj}"}
+for b in policy.get("bindings", []):
+    role = b.get("role", "")
+    if role.startswith("roles/storage.legacyBucket") or role.startswith(
+        "roles/storage.legacyObject"
+    ):
+        for member in b.get("members", []):
+            if member in targets:
+                print(f"{role} {member}")
+PY
+)"
+if [[ -z "$legacy_pairs" ]]; then
+  echo "ok   gs://$BUCKET has no legacy projectViewer/Editor/Owner bindings"
+else
+  backup_dir="${BACKUP_DIR:-$HOME/backups}"
+  mkdir -p "$backup_dir"
+  chmod 700 "$backup_dir" 2>/dev/null || true
+  backup_file="$backup_dir/${BUCKET}-iam-$(date -u +%Y%m%dT%H%M%SZ).json"
+  printf '%s\n' "$bucket_policy" >"$backup_file"
+  echo "saved gs://$BUCKET IAM backup to $backup_file"
+  while read -r legacy_role legacy_member; do
+    [[ -n "$legacy_role" && -n "$legacy_member" ]] || continue
+    gcloud storage buckets remove-iam-policy-binding "gs://$BUCKET" \
+      --member "$legacy_member" --role "$legacy_role" >/dev/null
+    echo "removed $legacy_member ($legacy_role) from gs://$BUCKET"
+  done <<<"$legacy_pairs"
+fi
 
 # --- secrets ----------------------------------------------------------------------
 if have gcloud secrets describe skywalker-mcp-seal-key --project "$PROJECT"; then echo "ok   skywalker-mcp-seal-key"
@@ -106,7 +148,7 @@ gcloud run deploy "${SERVICE}" \
   --project "${PROJECT}" \
   --region "${REGION}" \
   --service-account "${SA}" \
-  --set-env-vars "^@^SKYWALKER_REV=${REV}@SKYWALKER_MCP_USERS=/users/users.yaml@SKYWALKER_MCP_DATA=/data@SKYWALKER_BILLING_TABLE=${SKYWALKER_BILLING_TABLE}@SKYWALKER_BILLING_ACCOUNT=${SKYWALKER_BILLING_ACCOUNT}@SKYWALKER_JOB_PROJECT=${SKYWALKER_JOB_PROJECT}@SKYWALKER_FLEET_SCOPES=${SKYWALKER_FLEET_SCOPES}@SKYWALKER_QUOTA_PROJECT=${SKYWALKER_QUOTA_PROJECT}@SKYWALKER_DOMAIN=${SKYWALKER_DOMAIN:-ucr.edu}@SKYWALKER_BASE_URL=${SKYWALKER_BASE_URL}@SKYWALKER_AGENT_PROJECT=${SKYWALKER_AGENT_PROJECT}@SKYWALKER_AGENT_MODEL=${SKYWALKER_AGENT_MODEL}" \
+  --set-env-vars "^@^SKYWALKER_REV=${REV}@SKYWALKER_MCP_USERS=/users/users.yaml@SKYWALKER_MCP_DATA=/data@SKYWALKER_BILLING_TABLE=${SKYWALKER_BILLING_TABLE}@SKYWALKER_BILLING_ACCOUNT=${SKYWALKER_BILLING_ACCOUNT}@SKYWALKER_JOB_PROJECT=${SKYWALKER_JOB_PROJECT}@SKYWALKER_FLEET_SCOPES=${SKYWALKER_FLEET_SCOPES}@SKYWALKER_QUOTA_PROJECT=${SKYWALKER_QUOTA_PROJECT}@SKYWALKER_DOMAIN=${SKYWALKER_DOMAIN:-ucr.edu}@SKYWALKER_BASE_URL=${SKYWALKER_BASE_URL}@SKYWALKER_PUBLIC_URL=${SKYWALKER_PUBLIC_URL}@SKYWALKER_A2A_MIN_ROLE=${SKYWALKER_A2A_MIN_ROLE}@SKYWALKER_PROJECT_USAGE_FILE=${SKYWALKER_PROJECT_USAGE_FILE}@ATRIUM_URL=${ATRIUM_URL}@SKYWALKER_AGENT_PROJECT=${SKYWALKER_AGENT_PROJECT}@SKYWALKER_AGENT_MODEL=${SKYWALKER_AGENT_MODEL}" \
   --set-secrets "GOOGLE_OAUTH_CLIENT_ID=skywalker-mcp-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=skywalker-mcp-google-oauth-client-secret:latest,MCP_SEAL_KEY=skywalker-mcp-seal-key:latest,/users/users.yaml=skywalker-mcp-users:latest" \
   --add-volume "name=data,type=cloud-storage,bucket=${BUCKET}" \
   --add-volume-mount "volume=data,mount-path=/data" \

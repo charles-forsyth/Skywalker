@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 import cache
 import scope
 from access import GuardedMCP, read_only, setting
-from users import default_project, project_allowed
+from users import ProjectFallback, default_project, project_allowed, project_fallback
 
 from skywalker.intel import (
     GcpError,
@@ -110,6 +110,21 @@ def _pid(project_id: str, allow_all: bool = False) -> str:
     """The project this call is about (focus when empty); read users are held to
     their own projects here, before any Google call."""
     return scope.resolve(_ident(), mcp.store, project_id, allow_all)
+
+
+def _researcher_fallback(pid: str) -> ProjectFallback | None:
+    """Configured allocation/usage snapshot for a read caller's own project (None for staff)."""
+    ident = _ident()
+    if scope.is_staff(ident):
+        return None
+    return project_fallback(
+        ident.role,
+        ident.projects,
+        pid,
+        mcp.users,
+        mcp.project_usage,
+        email=ident.email,
+    )
 
 
 async def _run(
@@ -263,10 +278,22 @@ async def skywalker_overview(
         return await _run(
             "fleet", {"l": 25}, lambda g: overview.fleet(g, CONFIG, 25), fresh
         )
+    fb = _researcher_fallback(pid)
+
+    def run_overview(g: Any) -> Any:
+        out = overview.overview(g, CONFIG, pid, deep)
+        if fb is not None:
+            overview.apply_allocation_fallback(
+                out,
+                allocation=fb.allocation,
+                usage=fb.usage.as_dict() if fb.usage is not None else None,
+            )
+        return out
+
     return await _run(
         "overview",
         {"p": pid, "d": deep},
-        lambda g: overview.overview(g, CONFIG, pid, deep),
+        run_overview,
         fresh,
     )
 
@@ -286,10 +313,27 @@ async def skywalker_spend(
     pid = _pid(project_id)
     if group_by in ("project", "label_lab"):
         raise ToolError("cross-project grouping is skywalker_spend_all (staff)")
+    fb = _researcher_fallback(pid)
+
+    def run_spend(g: Any) -> Any:
+        try:
+            return billing.spend(g, CONFIG, pid, group_by, days, month, limit)
+        except GcpError as e:
+            if (
+                e.kind not in ("permission", "invalid")
+                or fb is None
+                or fb.usage is None
+                or group_by != "service"
+                or days != 0
+                or bool(month)
+            ):
+                raise
+            return overview.synthesize_spend(pid, fb.usage.as_dict())
+
     return await _run(
         "spend",
         {"p": pid, "g": group_by, "d": days, "m": month, "l": limit},
-        lambda g: billing.spend(g, CONFIG, pid, group_by, days, month, limit),
+        run_spend,
         fresh,
     )
 
@@ -300,10 +344,28 @@ async def skywalker_budget(project_id: str = "", fresh: bool = False) -> str:
     month's spend against it and the 7-day daily rate. Needs Billing Account
     Viewer (or budget access) on the billing account."""
     pid = _pid(project_id)
+    fb = _researcher_fallback(pid)
+
+    def run_budget(g: Any) -> Any:
+        try:
+            return billing.budgets(g, CONFIG, pid)
+        except GcpError as e:
+            if (
+                e.kind not in ("permission", "invalid")
+                or fb is None
+                or fb.allocation is None
+            ):
+                raise
+            return overview.synthesize_budget(
+                pid,
+                fb.allocation,
+                fb.usage.as_dict() if fb.usage is not None else None,
+            )
+
     return await _run(
         "budget",
         {"p": pid},
-        lambda g: billing.budgets(g, CONFIG, pid),
+        run_budget,
         fresh,
     )
 

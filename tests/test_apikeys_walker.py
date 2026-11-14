@@ -57,7 +57,7 @@ def test_get_api_keys_report_success(mocker):
     }
     mock_get_str_req2 = mocker.Mock()
     mock_get_str_req2.execute.return_value = {
-        "keyString": "AIzaSyKey2UnrestrictedKeyStringValue"
+        "keyString": "AIzaSyKey2OpenDummyKeyStringValue"
     }
 
     def get_key_string_side_effect(name):

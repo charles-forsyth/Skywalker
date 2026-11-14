@@ -32,7 +32,7 @@ import logging
 import os
 import time
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Protocol
 
 import anyio.to_thread
@@ -66,12 +66,14 @@ from a2a.utils.errors import ServerError
 from access import GuardedMCP
 from auth import IDENTITY_KEY, Identity, RateLimiter, audit
 from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
-from users import default_project
+from users import RANK, ROLES, default_project, role_at_least
 
 logger = logging.getLogger("skywalker-mcp.agent")
 
 AGENT_VERSION = "1.0.0"
+DEFAULT_A2A_MIN_ROLE = "staff"
 MAX_ROUNDS = 8  # model <-> tool rounds per message
 MAX_TOOL_CHARS = 40_000  # tool result handed to the model
 HISTORY_TURNS = 12  # user + model text turns kept per conversation
@@ -553,10 +555,24 @@ def agent_card(base_url: str) -> AgentCard:
     )
 
 
+def a2a_min_role(env: Mapping[str, str] = os.environ) -> str:
+    """Minimum Skywalker role allowed to call `/a2a/` (D3: default `staff`)."""
+    role = (env.get("SKYWALKER_A2A_MIN_ROLE") or DEFAULT_A2A_MIN_ROLE).strip().lower()
+    if role not in RANK:
+        raise ValueError(f"SKYWALKER_A2A_MIN_ROLE must be one of {ROLES}, got {role!r}")
+    return role
+
+
 def build_routes(
-    mcp: GuardedMCP, base_url: str, model: Model | None = None
+    mcp: GuardedMCP,
+    base_url: str,
+    model: Model | None = None,
+    min_role: str | None = None,
 ) -> list[Route]:
     """Routes for /a2a/ (JSON-RPC) and the agent card, or [] if no model."""
+    if min_role is not None and min_role not in RANK:
+        raise ValueError(f"min_role must be one of {ROLES}, got {min_role!r}")
+    a2a_min_role()
     if model is None:
         project = os.environ.get("SKYWALKER_AGENT_PROJECT", "")
         if not project:
@@ -579,9 +595,44 @@ def build_routes(
     )
     rpc = routes[0].endpoint
     card_ep = routes[1].endpoint
+
+    async def gated_rpc(request: Request) -> Response:
+        ident = request.scope.get(IDENTITY_KEY)
+        if not isinstance(ident, Identity):
+            return JSONResponse(
+                {"error": "invalid_token", "error_description": "not signed in"},
+                status_code=401,
+            )
+        needed = min_role or a2a_min_role()
+        if not role_at_least(ident.role, needed):
+            audit(
+                "a2a",
+                email=ident.email,
+                role=ident.role,
+                client=ident.client_id,
+                client_name=ident.client_name,
+                decision="denied",
+                reason=f"needs_{needed}",
+            )
+            return JSONResponse(
+                {
+                    "error": "access_denied",
+                    "error_description": (
+                        f"Skywalker A2A requires the '{needed}' role (you have '{ident.role}'); "
+                        "use Atrium for researcher cloud questions."
+                    ),
+                },
+                status_code=403,
+            )
+        resp: Response = await rpc(request)
+        return resp
+
     return [
-        *routes,
-        Route("/a2a", rpc, methods=["POST"]),
+        *(
+            Route("/a2a/", gated_rpc, methods=["POST"]) if r.path == "/a2a/" else r
+            for r in routes
+        ),
+        Route("/a2a", gated_rpc, methods=["POST"]),
         Route("/.well-known/agent-card.json", card_ep, methods=["GET"]),
         Route("/a2a/.well-known/agent.json", card_ep, methods=["GET"]),
     ]

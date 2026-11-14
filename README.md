@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-Production-orange)
+![Status](https://img.shields.io/badge/status-CLI%20%2B%20MCP%20Pilot-blue)
 
 ## 🚀 Key Capabilities
 
@@ -29,7 +29,7 @@ Aggregates real-time metrics (CPU, Memory, GPU) from hundreds of VMs into a sing
 *   **Orphaned Disks:** Unattached persistent disks silently charging monthly fees.
 *   **Unused Static IPs:** Reserved external IPs not attached to any resource.
 *   **Inactive Buckets:** GCS buckets with zero egress activity for 30 days.
-*   **Calculates ROI:** Estimates potential monthly savings (e.g., "$19,000/mo potential savings").
+*   **Calculates ROI:** Estimates potential monthly savings from list-price disk and IP rates.
 
 ### 4. 🛠️ Automated Remediation
 Interactive "Fix-It" mode to solve common fleet issues at scale.
@@ -40,6 +40,12 @@ Tracks and aggregates generative model usage (Vertex AI, Publisher Models) acros
 *   **Official Metrics:** Directly queries Cloud Monitoring timeseries for request count (`online_serving/model_invocation_count`) and input/output token counts (`online_serving/token_count`).
 *   **Pricing Map:** Dynamically parses model prices from `model_prices.csv` to calculate accurate estimated spend.
 *   **Fleet-Wide Summaries:** Aggregates costs, requests, and tokens, sortable by estimated cost or project ID, with full detailed nested tabular breakdowns.
+
+### 6. 🔌 Hosted MCP Server & A2A Agent (`mcp_server/`)
+Exposes 21 strictly read-only Google Cloud tools (`skywalker.intel`) over Streamable HTTP (`/mcp`) and A2A (`/a2a/`, `staff`+ by default):
+*   **Caller-Scoped GCP Access:** OAuth 2.1 + PKCE S256 (`POST /authorize` consent confirmation, grant-family refresh rotation, pinned `SKYWALKER_PUBLIC_URL`); every tool reads Google Cloud with the signed-in caller's own OAuth token, while the server's service account holds zero GCP data roles.
+*   **Per-Researcher Scope & Allocation Fallback:** `read` callers are restricted to their listed `projects` in `users.yaml` and receive scoped monthly allocation/usage summaries (`project_allocations` + optional `SKYWALKER_PROJECT_USAGE_FILE`) when central Cloud Billing IAM is unavailable.
+*   **Full Specification & Setup:** See [`mcp_server/README.md`](mcp_server/README.md) and [`docs/SPEC.md`](docs/SPEC.md).
 
 ## 📦 Installation
 
@@ -111,9 +117,9 @@ skywalker --all-projects --html fleet_report.html
 ## 🤝 Contributing
 
 1.  Create a feature branch (`feat/new-thing`).
-2.  Write tests (`pytest`).
-3.  Ensure typing passes (`mypy src`).
-4.  Format code (`ruff format .`).
+2.  Write CLI and MCP tests (`pytest` and `bash scripts/test_mcp.sh`).
+3.  Verify security mutation guards (`python3 scripts/mcp_mutation_check.py`).
+4.  Ensure typing and formatting pass (`mypy src` and `ruff check .`).
 5.  Submit a PR.
 
 ---

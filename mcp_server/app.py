@@ -23,6 +23,28 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.routing import BaseRoute
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+
+class WellKnownCORS:
+    """Allow cross-origin browser reads only on public /.well-known/* metadata."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        self._cors = CORSMiddleware(
+            app,
+            allow_origins=["*"],
+            allow_methods=["GET", "HEAD", "OPTIONS"],
+            allow_headers=["Accept", "Content-Type"],
+        )
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path.startswith("/.well-known/") or path.startswith("/a2a/.well-known/"):
+                await self._cors(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
 
 
 def build_app(
@@ -35,6 +57,7 @@ def build_app(
     mcp.google_tokens = auth.google_tokens
     mcp.quota_project = quota_project
     mcp.store = auth.store
+    mcp.users = auth.users
     # A fresh session manager per app (FastMCP keeps one, and it can only run once).
     mcp._session_manager = None
     routes = [*auth.routes, *mcp.streamable_http_app().routes]
@@ -51,13 +74,7 @@ def build_app(
     return Starlette(
         routes=routes,
         middleware=[
-            Middleware(
-                CORSMiddleware,
-                allow_origins=["*"],
-                allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-                allow_headers=["*"],
-                expose_headers=["WWW-Authenticate", "Mcp-Session-Id"],
-            ),
+            Middleware(WellKnownCORS),
             Middleware(BearerAuth, auth=auth),
         ],
         lifespan=lifespan,
@@ -69,7 +86,11 @@ if __name__ == "__main__":
     from agent import build_routes
     from server import TOOLS_VERSION, mcp
 
-    base_url = os.environ.get("SKYWALKER_BASE_URL", "")
+    base_url = (
+        os.environ.get("SKYWALKER_PUBLIC_URL")
+        or os.environ.get("PUBLIC_URL")
+        or os.environ.get("SKYWALKER_BASE_URL", "")
+    )
     app = build_app(
         mcp,
         build_auth_from_env(tools_version=TOOLS_VERSION),
@@ -80,6 +101,5 @@ if __name__ == "__main__":
         app,
         host="0.0.0.0",
         port=int(os.environ.get("PORT", "8080")),
-        proxy_headers=True,
-        forwarded_allow_ips="*",
+        proxy_headers=False,
     )

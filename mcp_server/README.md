@@ -21,10 +21,16 @@ Enterprise, Hermes and programs such as Ultra. Built on `skywalker.intel` in thi
   token); users file with roles in Secret Manager, re-read on change; roles checked
   on every call; tool list filtered per caller; opaque access/refresh tokens stored
   hashed and sealed on a Cloud Storage volume (restarts keep everyone signed in);
-  rotating refresh tokens bound to the client; `/revoke` (RFC 7009); one JSON audit
-  line per sign-in and tool call; per-person and per-client rate limits; an
-  in-flight cap; program clients with a role ceiling. Unknown `client_id`s are
-  refused (no adoption), and a redirect URI must be registered.
+  rotating refresh tokens bound to the client and a `grant_id` family (90-day max
+  age, replay revokes the whole grant, `/revoke` revokes both access and refresh
+  tokens); canonical `SKYWALKER_PUBLIC_URL` pinned from env (`X-Forwarded-Host`
+  ignored); CSRF-protected `POST /authorize` confirmation with 90-day
+  `Path=/authorize` seen cookies scoped per `(client_id, redirect_host)` for
+  program clients only (dynamic RFC 7591 clients always show the consent screen);
+  one JSON audit line per sign-in and tool call; per-person and per-client rate
+  limits; an in-flight cap; program clients with a role ceiling; CORS restricted
+  to `/.well-known/*`. Unknown `client_id`s are refused (no adoption), and a
+  redirect URI must be registered.
 - **Answers cached per person and client** for 120 s (`fresh=true` skips the cache).
   Nothing is shared between people.
 - **Streamable HTTP** at `/mcp` (stateless). The deprecated SSE transport at `/sse`
@@ -37,9 +43,14 @@ Enterprise, Hermes and programs such as Ultra. Built on `skywalker.intel` in thi
   optional on every per-project tool and defaults to the caller's **focus**: their
   first listed project, changed with `skywalker_focus` (sealed in the store, shared
   by all their clients). Staff can focus on `all`, which makes `skywalker_overview`
-  the fleet view.
+  the fleet view. For `read` users whose Google accounts lack central Cloud Billing
+  IAM, optional `project_allocations` / per-user `allocations` in `users.yaml` and
+  `SKYWALKER_PROJECT_USAGE_FILE` synthesize monthly allocation and usage summaries
+  scoped strictly to `project_allowed`.
 - **A2A agent for Gemini Enterprise** (`agent.py`) at `/a2a/` in the same service,
-  so there is one policy point. Gemini Enterprise sends the person's Skywalker
+  gated to `staff` by default (`SKYWALKER_A2A_MIN_ROLE`, default `staff`) so
+  researchers use Atrium `/a2a/cloud` while RC staff can query Skywalker directly.
+  Gemini Enterprise sends the person's Skywalker
   token (from Skywalker's own OAuth, through the pre-registered confidential client
   `skywalker-gemini-enterprise`). The model (Gemini on Vertex AI, called as the
   service account, whose only role is `roles/aiplatform.user`) gets just the tools
@@ -52,14 +63,15 @@ Enterprise, Hermes and programs such as Ultra. Built on `skywalker.intel` in thi
 
 | Path | What |
 |---|---|
+| `/` | RC-styled browser landing page (`Accept: text/html`); 401 challenge for programmatic probes |
 | `/mcp` | MCP, Streamable HTTP (needs a token) |
 | `/sse`, `/messages/` | MCP, legacy SSE (needs a token) |
 | `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server` | discovery |
-| `/register`, `/authorize`, `/oauth/callback`, `/token`, `/revoke` | OAuth 2.1 (PKCE S256) |
+| `/register`, `/authorize` (GET/POST), `/oauth/callback`, `/token`, `/revoke` | OAuth 2.1 (PKCE S256) |
 | `/whoami` | identity, role, whether a Google token is stored |
 | `/signout` (POST) | delete and revoke your Google grant and end all your sessions |
 | `/health` | `rev` (commit) and `tools_version` |
-| `/a2a/` | A2A 0.3 JSON-RPC agent (needs a token) |
+| `/a2a/` | A2A 0.3 JSON-RPC agent (needs a token; `staff`+ by default) |
 | `/a2a/.well-known/agent-card.json`, `/.well-known/agent-card.json` | agent card (public) |
 
 ## Tools
@@ -110,6 +122,10 @@ Server settings (env, set by `deploy.sh` from `~/.config/skywalker/mcp-server.en
 | `SKYWALKER_QUOTA_PROJECT` | `my-project` | quota project for API calls (needs Recommender, Policy Analyzer and Cloud Quotas enabled) |
 | `SKYWALKER_MAX_BYTES` | `10737418240` | per-query BigQuery byte cap (default 10 GB) |
 | `SKYWALKER_BASE_URL` | `https://skywalker-...run.app` | public URL; turns on the A2A agent (its card names it) |
+| `SKYWALKER_PUBLIC_URL` | `https://skywalker-...run.app` | canonical OAuth issuer/callback base URL (`X-Forwarded-Host` ignored) |
+| `SKYWALKER_A2A_MIN_ROLE` | `staff` | minimum role for `/a2a/` (default `staff`) |
+| `SKYWALKER_PROJECT_USAGE_FILE` | `/data/project_usage.json` | optional pre-aggregated monthly project usage JSON for `read` fallback |
+| `ATRIUM_URL` | `https://atrium.example.edu/` | optional Atrium link on public HTML pages |
 | `SKYWALKER_AGENT_PROJECT` | `my-project` | where the agent's Gemini calls run and bill |
 | `SKYWALKER_AGENT_MODEL` | `gemini-3.8-flash` | the agent's model |
 

@@ -8,13 +8,14 @@ import copy
 import json
 import urllib.parse
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 import scope
-from conftest import BASE, audit_lines, call, payload, pkce, sign_in
+from conftest import BASE, audit_lines, call, confirm_authorize, payload, pkce, sign_in
 from starlette.testclient import TestClient
-from users import UsersFileError, parse, project_allowed
+from users import ProjectUsage, UsersFileError, parse, project_allowed, project_fallback
 
 GE = "skywalker-gemini-enterprise"
 GE_REDIRECT = "https://vertexaisearch.cloud.google.com/static/oauth/oauth.html"
@@ -272,13 +273,7 @@ def _ge_code(env: dict[str, Any], with_pkce: bool) -> tuple[str, str]:
         params |= {"code_challenge": challenge, "code_challenge_method": "S256"}
     r = c.get("/authorize", params=params, follow_redirects=False)
     assert r.status_code in (200, 302), r.text
-    loc = (
-        r.headers["location"]
-        if r.status_code == 302
-        else r.text.split('class="b" href="', 1)[1]
-        .split('"', 1)[0]
-        .replace("&amp;", "&")
-    )
+    loc = r.headers["location"] if r.status_code == 302 else confirm_authorize(c, r)
     g = urllib.parse.parse_qs(urllib.parse.urlsplit(loc).query)
     env["google"].claims = {
         "email": "forsythc@ucr.edu",
@@ -488,9 +483,40 @@ def test_agent_needs_a_skywalker_token(a2a: dict[str, Any]) -> None:
     assert a2a["model"].seen == []
 
 
+def test_a2a_requires_staff_by_default(a2a: dict[str, Any]) -> None:
+    c = a2a["client"]
+    reader = sign_in(a2a, "nolab@ucr.edu")["access_token"]
+    for path in ("/a2a/", "/a2a"):
+        r = c.post(
+            path,
+            headers={"Authorization": f"Bearer {reader}"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "message/send", "params": {}},
+        )
+        assert r.status_code == 403 and r.json()["error"] == "access_denied"
+    # Staff capped to read by a program client is also refused at /a2a/.
+    capped = sign_in(
+        a2a,
+        "staffer@ucr.edu",
+        client_id="skywalker-ultra",
+        redirect="http://127.0.0.1:41234/callback",
+    )["access_token"]
+    assert _send(c, capped, "hello").status_code == 403
+    assert a2a["model"].seen == []
+    lines = [ln for ln in audit_lines(a2a) if ln["event"] == "a2a"]
+    assert lines and all(
+        ln["decision"] == "denied" and ln["reason"] == "needs_staff" for ln in lines
+    )
+
+    # Staff and admin callers succeed by default.
+    staffer = sign_in(a2a, "staffer@ucr.edu")["access_token"]
+    a2a["model"].script = [[{"text": "staff ok"}]]
+    assert _answer(_send(c, staffer, "status?")) == "staff ok"
+
+
 def test_agent_tools_run_as_the_caller_with_scope_and_audit(
     a2a: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setenv("SKYWALKER_A2A_MIN_ROLE", "read")
     _cfg(monkeypatch)
     seen = _bq_ok(a2a["cloud"])
     c, model = a2a["client"], a2a["model"]
@@ -544,25 +570,25 @@ def test_agent_tools_run_as_the_caller_with_scope_and_audit(
 def test_agent_remembers_the_conversation_per_person(a2a: dict[str, Any]) -> None:
     c, model = a2a["client"], a2a["model"]
     chuck = sign_in(a2a, "forsythc@ucr.edu")["access_token"]
-    mike = sign_in(a2a, "mikek@ucr.edu")["access_token"]
+    staffer = sign_in(a2a, "staffer@ucr.edu")["access_token"]
     model.script = [
         [{"text": "first answer"}],
         [{"text": "second"}],
-        [{"text": "mike"}],
+        [{"text": "staffer"}],
     ]
     _answer(_send(c, chuck, "question one"))
     _answer(_send(c, chuck, "question two"))
     texts = [p["text"] for t in model.seen[1]["contents"] for p in t["parts"]]
     assert texts == ["question one", "first answer", "question two"]
     # same context id from another person starts fresh
-    _answer(_send(c, mike, "question three"))
+    _answer(_send(c, staffer, "question three"))
     assert len(model.seen[2]["contents"]) == 1
 
 
 def test_agent_tasks_are_private(a2a: dict[str, Any]) -> None:
     c, model = a2a["client"], a2a["model"]
     chuck = sign_in(a2a, "forsythc@ucr.edu")["access_token"]
-    mike = sign_in(a2a, "mikek@ucr.edu")["access_token"]
+    staffer = sign_in(a2a, "staffer@ucr.edu")["access_token"]
     model.script = [[{"text": "private answer"}]]
     task_id = _send(c, chuck, "hello").json()["result"]["id"]
 
@@ -579,7 +605,7 @@ def test_agent_tasks_are_private(a2a: dict[str, Any]) -> None:
         ).json()
 
     assert get(chuck)["result"]["id"] == task_id
-    assert "error" in get(mike) and "private answer" not in json.dumps(get(mike))
+    assert "error" in get(staffer) and "private answer" not in json.dumps(get(staffer))
 
 
 def test_agent_rate_limit(a2a: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -587,7 +613,7 @@ def test_agent_rate_limit(a2a: dict[str, Any], monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(agent, "MESSAGES_PER_MIN", 2)
     c = a2a["client"]
-    tok = sign_in(a2a, "mikek@ucr.edu")["access_token"]
+    tok = sign_in(a2a, "staffer@ucr.edu")["access_token"]
     states = [
         _send(c, tok, f"q{i}").json()["result"]["status"]["state"] for i in range(3)
     ]
@@ -607,11 +633,11 @@ def test_agent_stops_after_max_rounds(a2a: dict[str, Any]) -> None:
 
 def test_removed_user_loses_the_agent_too(a2a: dict[str, Any]) -> None:
     c = a2a["client"]
-    tok = sign_in(a2a, "mikek@ucr.edu")["access_token"]
+    tok = sign_in(a2a, "staffer@ucr.edu")["access_token"]
     a2a["users_file"].write_text(
         a2a["users_file"]
         .read_text()
-        .replace("role: read, aliases", "role: read, disabled: true, aliases")
+        .replace("role: staff", "role: staff, disabled: true")
     )
     a2a["server"].users.recheck = 0
     assert _send(c, tok, "still there?").status_code == 403
@@ -633,3 +659,245 @@ def test_scope_module_has_no_google_calls() -> None:
 
     src = inspect.getsource(scope)
     assert "skywalker.intel" not in src and "requests" not in src
+
+
+# --- D4: Researcher allocation & pre-aggregated usage fallback ------------------------
+
+
+def test_allocations_parsed_and_validated() -> None:
+    cfg = parse(
+        """
+domain: example.edu
+project_allocations:
+  example-lab-proj: 1000.0
+  other-lab-proj: 2500
+users:
+  - email: alice@example.edu
+    netid: alice
+    role: read
+    projects: [example-lab-proj]
+    allocations:
+      example-lab-proj: 1200.5
+"""
+    )
+    assert cfg.project_allocations == {
+        "example-lab-proj": 1000.0,
+        "other-lab-proj": 2500.0,
+    }
+    assert cfg.users[0].allocations == {"example-lab-proj": 1200.5}
+    for bad in (
+        "domain: example.edu\nproject_allocations: [1, 2]\n",
+        "domain: example.edu\nproject_allocations:\n  'lab-*': 100\n",
+        "domain: example.edu\nproject_allocations:\n  example-lab-proj: -10\n",
+        "domain: example.edu\nproject_allocations:\n  example-lab-proj: true\n",
+    ):
+        with pytest.raises(UsersFileError):
+            parse(bad)
+
+
+def test_researcher_fallback_strictly_gated_by_project_allowed(
+    tmp_path: Path,
+) -> None:
+    from users import Users
+
+    users_file = tmp_path / "users.yaml"
+    users_file.write_text(
+        """
+domain: example.edu
+users:
+  - {email: alice@example.edu, netid: alice, role: read, projects: [example-lab-proj, "example-gpu-*"]}
+project_allocations:
+  example-lab-proj: 1000.0
+  other-lab-proj: 9999.0
+"""
+    )
+    usage_path = tmp_path / "usage.json"
+    usage_path.write_text(
+        json.dumps(
+            {
+                "projects": {
+                    "example-lab-proj": {
+                        "spend_this_month": 240.5,
+                        "as_of": "2026-11-14T08:00:00Z",
+                    },
+                    "other-lab-proj": {
+                        "spend_this_month": 4500.0,
+                        "as_of": "2026-11-14T08:00:00Z",
+                    },
+                }
+            }
+        )
+    )
+    users = Users(str(users_file), recheck=0)
+    pu = ProjectUsage(str(usage_path), recheck=0)
+    # Allowed project for read user returns allocation + usage.
+    ok = project_fallback(
+        "read",
+        ("example-lab-proj", "example-gpu-*"),
+        "example-lab-proj",
+        users,
+        pu,
+        email="alice@example.edu",
+    )
+    assert (
+        ok is not None
+        and ok.allocation == 1000.0
+        and ok.usage is not None
+        and ok.usage.spend_this_month == 240.5
+    )
+    # Disallowed project for read user MUST return None (never leaks other-lab-proj).
+    denied = project_fallback(
+        "read",
+        ("example-lab-proj", "example-gpu-*"),
+        "other-lab-proj",
+        users,
+        pu,
+        email="alice@example.edu",
+    )
+    assert denied is None
+
+
+def test_researcher_allocation_and_usage_fallback_when_central_billing_403(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import server
+
+    from skywalker.intel import IntelConfig
+
+    monkeypatch.setattr(
+        server,
+        "CONFIG",
+        IntelConfig(
+            billing_table="bill-proj.dataset.export_table",
+            billing_account="000000-AAAAAA-BBBBBB",
+            job_project="job-proj",
+        ),
+    )
+    # Configure synthetic researcher + allocations (top-level + per-user override) and usage file.
+    env["users_file"].write_text(
+        """
+domain: example.edu
+users:
+  - {email: alice@example.edu, netid: alice, role: read,
+     projects: [example-lab-proj, "example-gpu-*"],
+     allocations: {example-gpu-1: 2500.0}}
+  - {email: ops@example.edu, netid: ops, role: staff, projects: [example-lab-proj]}
+project_allocations:
+  example-lab-proj: 1000.0
+  other-lab-proj: 5000.0
+"""
+    )
+    env["server"].users.recheck = 0
+    usage_file = env["tmp"] / "project_usage.json"
+    usage_file.write_text(
+        json.dumps(
+            {
+                "as_of": "2026-11-14T08:00:00Z",
+                "projects": {
+                    "example-lab-proj": {
+                        "spend_this_month": 240.5,
+                        "as_of": "2026-11-14T08:00:00Z",
+                        "services": [
+                            {
+                                "service": "Compute Engine",
+                                "gross": 240.5,
+                                "credits": 0.0,
+                            }
+                        ],
+                    },
+                    "other-lab-proj": {
+                        "spend_this_month": 4100.0,
+                        "as_of": "2026-11-14T08:00:00Z",
+                    },
+                },
+            }
+        )
+    )
+    monkeypatch.setenv("SKYWALKER_PROJECT_USAGE_FILE", str(usage_file))
+    server.mcp.project_usage = ProjectUsage(recheck=0)
+
+    cloud = env["cloud"]
+    for p in ("example-lab-proj", "example-gpu-1"):
+        cloud.on(
+            "GET",
+            rf"/v3/projects/{p}$",
+            {"projectId": p, "name": "projects/111", "state": "ACTIVE"},
+        )
+    cloud.on(
+        "GET",
+        r"cloudresourcemanager.*projects:search",
+        {"projects": [{"projectId": "example-lab-proj", "name": "projects/111"}]},
+    )
+    cloud.on("GET", r"billingInfo$", {"billingEnabled": True})
+    cloud.on("GET", r"searchAllResources", {"results": []})
+    cloud.on("GET", r"aggregated/(instances|disks|addresses)", {"items": {}})
+    cloud.on("GET", r"global/(snapshots|images|firewalls)", {"items": []})
+    cloud.on("GET", r"/services$", {"services": []})
+    cloud.on("POST", r":getIamPolicy$", {"bindings": []})
+    cloud.on("GET", r"searchAllIamPolicies", {"results": []})
+    cloud.on("GET", r"securitycenter", {"listFindingsResults": []})
+    cloud.on("POST", r"entries:list$", {"entries": []})
+    cloud.on("GET", r"apikeys", {"keys": []})
+    cloud.on("GET", r"timeSeries", {"timeSeries": []})
+    # Central Cloud Billing & BigQuery return 403 PERMISSION_DENIED for researchers!
+    deny_403 = (
+        403,
+        {
+            "error": {
+                "code": 403,
+                "status": "PERMISSION_DENIED",
+                "message": "caller lacks billing.budgets.list / bigquery.jobs.create",
+            }
+        },
+    )
+    cloud.on("GET", r"billingbudgets.*/budgets$", lambda p, b, t: deny_403)
+    cloud.on("POST", r"bigquery\.googleapis\.com/.*/queries", lambda p, b, t: deny_403)
+
+    c = env["client"]
+    alice = sign_in(env, "alice@example.edu", hd="example.edu")["access_token"]
+
+    # 1. skywalker_overview synthesizes budget + spend and clears unavailable["budget"]/["spend"].
+    ov = payload(
+        call(c, alice, "skywalker_overview", {"project_id": "example-lab-proj"})
+    )
+    b = ov["budget"]["budgets"][0]
+    assert (
+        b["name"] == "example-lab-proj monthly allocation"
+        and b["amount"] == 1000.0
+        and b["spend_this_month"] == 240.5
+        and b["pct"] == 24.1
+    )
+    assert ov["spend"]["total"]["gross"] == 240.5
+    assert ov["spend"]["as_of"] == "2026-11-14T08:00:00Z"
+    unavail = ov.get("unavailable") or {}
+    assert "budget" not in unavail and "spend" not in unavail
+    finding_texts = [f["text"] for f in ov["findings"]]
+    assert any("$240.50 gross" in t for t in finding_texts)
+    assert not any("Pub/Sub" in t for t in finding_texts)
+
+    # 2. skywalker_budget returns synthesized allocation instead of throwing 403 ToolError!
+    bud = payload(
+        call(c, alice, "skywalker_budget", {"project_id": "example-lab-proj"})
+    )
+    assert bud["budgets"][0]["amount"] == 1000.0 and bud["budgets"][0]["pct"] == 24.1
+
+    # 3. skywalker_spend returns synthesized usage snapshot instead of throwing 403 ToolError!
+    sp = payload(call(c, alice, "skywalker_spend", {"project_id": "example-lab-proj"}))
+    assert sp["total"]["gross"] == 240.5
+
+    # 4. Project with allocation only (no usage snapshot): budget satisfied, spend stays unavailable.
+    ov2 = payload(call(c, alice, "skywalker_overview", {"project_id": "example-gpu-1"}))
+    assert (
+        ov2["budget"]["budgets"][0]["amount"] == 2500.0
+        and ov2["budget"]["budgets"][0]["spend_this_month"] is None
+    )
+    assert "budget" not in ov2["unavailable"] and "spend" in ov2["unavailable"]
+
+    # 5. Another lab's project remains completely refused before any Google call or fallback.
+    other = call(c, alice, "skywalker_budget", {"project_id": "other-lab-proj"})
+    assert other["isError"] and "5000" not in json.dumps(other)
+
+    # 6. Staff callers still see real 403 if central Billing IAM fails (never silent fallback).
+    ops_tok = sign_in(env, "ops@example.edu", hd="example.edu")["access_token"]
+    staff_bud = call(c, ops_tok, "skywalker_budget", {"project_id": "example-lab-proj"})
+    assert staff_bud["isError"] and "permission:" in staff_bud["content"][0]["text"]

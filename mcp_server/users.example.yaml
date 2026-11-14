@@ -37,3 +37,10 @@ clients: []
 
 # Dynamic client ids (mcp_...) to cut off, e.g. a connector on a lost laptop.
 disabled_clients: []
+
+# Optional monthly project allocations (USD) for read callers whose own Google
+# token lacks central Cloud Billing IAM (D4). Per-user `allocations:` overrides
+# `project_allocations:` for that user; read callers only ever see projects
+# matching their own `projects` list.
+project_allocations: {}
+#  lab-bob-project: 1000.0

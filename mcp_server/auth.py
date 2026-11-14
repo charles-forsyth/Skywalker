@@ -48,6 +48,7 @@ import html
 import json
 import logging
 import os
+import re
 import secrets
 import sys
 import threading
@@ -78,10 +79,13 @@ logger = logging.getLogger("skywalker-mcp.auth")
 
 ACCESS_TOKEN_TTL = 3600  # 1 hour
 REFRESH_TOKEN_TTL = 86400 * 30  # 30 days
+GRANT_MAX_AGE = 86400 * 90  # 90 days absolute lifetime per sign-in grant
 GRANT_WINDOW = 600  # an in-flight sign-in lives 10 minutes
 SCOPE = "mcp"
 IDENTITY_KEY = "skywalker.identity"  # ASGI scope key the MCP layer reads
 SEEN_COOKIE = "skywalker_mcp_seen"
+SEEN_COOKIE_MAX_AGE = 86400 * 90  # 90 days
+CONSENT_CSRF_COOKIE = "skywalker_mcp_csrf"
 
 GOOGLE_AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -429,8 +433,67 @@ def _client_credentials(request: Request, form: Any) -> tuple[str, str]:
 def _client_ip(request: Request) -> str:
     fwd = request.headers.get("x-forwarded-for", "")
     if fwd:
-        return fwd.split(",")[0].strip()
+        parts = [p.strip() for p in fwd.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     return request.client.host if request.client else ""
+
+
+_SAFE_HOST = re.compile(r"^[A-Za-z0-9._:-]{1,255}$")
+
+
+def _canonical_public_url(configured: str = "") -> str:
+    raw = (
+        (
+            configured
+            or os.environ.get("SKYWALKER_PUBLIC_URL")
+            or os.environ.get("PUBLIC_URL")
+            or ""
+        )
+        .strip()
+        .rstrip("/")
+    )
+    if not raw:
+        return ""
+    u = urllib.parse.urlsplit(raw)
+    if u.scheme not in ("https", "http") or not u.netloc:
+        raise ValueError(f"invalid public URL {raw!r}")
+    return f"{u.scheme}://{u.netloc}"
+
+
+def _valid_http_url(raw: str) -> str:
+    val = (raw or "").strip()
+    if not val:
+        return ""
+    u = urllib.parse.urlsplit(val)
+    if u.scheme in ("https", "http") and u.netloc and not u.fragment:
+        return val
+    return ""
+
+
+def _atrium_url(configured: str = "") -> str:
+    return _valid_http_url(
+        configured
+        or os.environ.get("ATRIUM_URL", "")
+        or os.environ.get("SKYWALKER_ATRIUM_URL", "")
+    )
+
+
+def _wants_html(accept: str) -> bool:
+    return "text/html" in (accept or "").lower()
+
+
+def _scope_wants_html(scope: Scope) -> bool:
+    for k, v in scope.get("headers", []):
+        if k == b"accept":
+            return _wants_html(v.decode("latin-1"))
+    return False
+
+
+def _seen_cookie_name(client_id: str, redirect_uri: str) -> str:
+    host = (urllib.parse.urlsplit(redirect_uri).hostname or "").lower()
+    digest = hashlib.sha256(f"{client_id}|{host}".encode()).hexdigest()[:16]
+    return f"{SEEN_COOKIE}_{digest}"
 
 
 def _oauth_error(kind: str, desc: str, status: int = 400) -> JSONResponse:
@@ -441,18 +504,22 @@ def _oauth_error(kind: str, desc: str, status: int = 400) -> JSONResponse:
     )
 
 
-_RC_CSS = "body{margin:0;font-family:'Fira Sans','Helvetica Neue',Arial,sans-serif;color:#0f1b33;background:#f2f6fc;line-height:1.55}.u{background:#001a4f;color:#ccd8ed;font-size:13px;padding:6px 0}.u a{color:#ccd8ed;text-decoration:none;margin-right:18px}.t{background:#fff;border-bottom:1px solid #d5deec}.w{max-width:40rem;margin:0 auto;padding:0 1.25rem}.br{display:block;padding:14px 0;font-family:'Fira Sans Condensed','Fira Sans',Arial,sans-serif;font-weight:700;font-size:22px;color:#00287a;border-left:4px solid #ffb81c;padding-left:12px;margin:12px 0;line-height:1.1}.br small{display:block;font-family:'Fira Sans',Arial,sans-serif;font-weight:400;font-size:12px;color:#4b5874;margin-top:3px}.c{background:#fff;border:1px solid #d5deec;border-top:4px solid #003da5;border-radius:6px;padding:1.4rem 1.5rem;margin:2rem auto}h1{font-family:'Fira Sans Condensed','Fira Sans',Arial,sans-serif;font-size:1.6rem;color:#00287a;margin:0 0 .8rem}a{color:#1565c0}code{font-family:'Fira Code',ui-monospace,monospace;background:#eef1f6;padding:0 .3rem;border-radius:3px;word-break:break-all}a.b{display:inline-block;background:#003da5;color:#fff;padding:10px 18px;border-radius:4px;text-decoration:none;font-family:'Fira Sans Condensed','Fira Sans',Arial,sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.6px;font-size:14px}.n{background:#fffaf0;border-left:4px solid #ffb81c;padding:.6rem .9rem;border-radius:0 6px 6px 0}.bad{border-top-color:#b00020}.f{color:#4b5874;font-size:13px;text-align:center;padding:0 0 2rem}.f a{color:#4b5874}"
+_RC_CSS = "body{margin:0;font-family:'Fira Sans','Helvetica Neue',Arial,sans-serif;color:#0f1b33;background:#f2f6fc;line-height:1.55}.u{background:#001a4f;color:#ccd8ed;font-size:13px;padding:6px 0}.u a{color:#ccd8ed;text-decoration:none;margin-right:18px}.t{background:#fff;border-bottom:1px solid #d5deec}.w{max-width:40rem;margin:0 auto;padding:0 1.25rem}.br{display:block;padding:14px 0;font-family:'Fira Sans Condensed','Fira Sans',Arial,sans-serif;font-weight:700;font-size:22px;color:#00287a;border-left:4px solid #ffb81c;padding-left:12px;margin:12px 0;line-height:1.1}.br small{display:block;font-family:'Fira Sans',Arial,sans-serif;font-weight:400;font-size:12px;color:#4b5874;margin-top:3px}.c{background:#fff;border:1px solid #d5deec;border-top:4px solid #003da5;border-radius:6px;padding:1.4rem 1.5rem;margin:2rem auto}h1{font-family:'Fira Sans Condensed','Fira Sans',Arial,sans-serif;font-size:1.6rem;color:#00287a;margin:0 0 .8rem}a{color:#1565c0}code{font-family:'Fira Code',ui-monospace,monospace;background:#eef1f6;padding:0 .3rem;border-radius:3px;word-break:break-all}a.b,button.b{display:inline-block;background:#003da5;color:#fff;padding:10px 18px;border-radius:4px;border:0;cursor:pointer;text-decoration:none;font-family:'Fira Sans Condensed','Fira Sans',Arial,sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.6px;font-size:14px}.n{background:#fffaf0;border-left:4px solid #ffb81c;padding:.6rem .9rem;border-radius:0 6px 6px 0}.bad{border-top-color:#b00020}.f{color:#4b5874;font-size:13px;text-align:center;padding:0 0 2rem}.f a{color:#4b5874}"
 
 
-def _page(title: str, body: str, status: int = 200) -> HTMLResponse:
+def _page(
+    title: str, body: str, status: int = 200, atrium_url: str = ""
+) -> HTMLResponse:
     """A page in the UCR Research Computing website look (inline styles: strict CSP)."""
     bad = " bad" if status >= 400 else ""
     t = html.escape(title)
+    atrium = _atrium_url(atrium_url)
+    atrium_nav = f'<a href="{html.escape(atrium)}">Atrium</a>' if atrium else ""
     return HTMLResponse(
         f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#00287a">
 <title>{t} | Skywalker</title><style>{_RC_CSS}</style></head><body>
-<div class="u"><div class="w"><a href="https://www.ucr.edu/">UCR Home</a><a href="https://ucr-research-computing.github.io/">Research Computing</a></div></div>
+<div class="u"><div class="w"><a href="https://www.ucr.edu/">UCR Home</a><a href="https://ucr-research-computing.github.io/">Research Computing</a>{atrium_nav}</div></div>
 <div class="t"><div class="w"><span class="br">Skywalker<small>UCR Research Computing</small></span></div></div>
 <div class="w"><div class="c{bad}"><h1>{t}</h1>{body}</div>
 <p class="f"><a href="https://ucr-research-computing.github.io/help/">Help from Research Computing</a></p></div>
@@ -461,7 +528,7 @@ def _page(title: str, body: str, status: int = 200) -> HTMLResponse:
         headers={
             "Cache-Control": "no-store",
             "X-Frame-Options": "DENY",
-            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'",
         },
     )
 
@@ -477,6 +544,8 @@ class AuthServer:
         google: Google,
         rev: str = "",
         tools_version: str = "",
+        public_url: str = "",
+        atrium_url: str = "",
     ) -> None:
         self.users = users
         self.store = store
@@ -484,9 +553,13 @@ class AuthServer:
         self.google_tokens = GoogleTokens(store, google)
         self.rev = rev
         self.tools_version = tools_version
+        self.public_url = _canonical_public_url(public_url) if public_url else ""
+        self.atrium_url = _valid_http_url(atrium_url)
         self.limiter = RateLimiter()
         self._access: dict[str, dict[str, Any]] = {}  # hash -> record (cache)
+        self._revoked_grants: dict[str, float] = {}  # grant_id -> expires
         self._lock = threading.Lock()
+        self._refresh_lock = threading.Lock()
 
     # -- clients ---------------------------------------------------------------
 
@@ -514,14 +587,27 @@ class AuthServer:
 
     # -- tokens ----------------------------------------------------------------
 
-    def _issue(self, client_id: str, email: str) -> JSONResponse:
+    def _issue(
+        self,
+        client_id: str,
+        email: str,
+        grant_id: str | None = None,
+        grant_start: float | None = None,
+    ) -> JSONResponse:
         now = time.time()
+        gid = grant_id or secrets.token_urlsafe(24)
+        gstart = grant_start if grant_start is not None else now
+        max_exp = gstart + GRANT_MAX_AGE
+        access_exp = min(now + ACCESS_TOKEN_TTL, max_exp)
+        refresh_exp = min(now + REFRESH_TOKEN_TTL, max_exp)
         at = "swa_" + secrets.token_urlsafe(32)
         rt = "swr_" + secrets.token_urlsafe(32)
         access = {
             "email": email,
             "client_id": client_id,
-            "expires": now + ACCESS_TOKEN_TTL,
+            "grant_id": gid,
+            "grant_start": gstart,
+            "expires": access_exp,
         }
         self.store.put("access", _hash(at), access)
         with self._lock:
@@ -532,18 +618,77 @@ class AuthServer:
             {
                 "email": email,
                 "client_id": client_id,
-                "expires": now + REFRESH_TOKEN_TTL,
+                "grant_id": gid,
+                "grant_start": gstart,
+                "expires": refresh_exp,
             },
         )
         return JSONResponse(
             {
                 "access_token": at,
                 "token_type": "Bearer",
-                "expires_in": ACCESS_TOKEN_TTL,
+                "expires_in": max(1, int(access_exp - now)),
                 "refresh_token": rt,
                 "scope": SCOPE,
             },
             headers={"Cache-Control": "no-store"},
+        )
+
+    def _grant_revoked(self, grant_id: str) -> bool:
+        if not grant_id:
+            return False
+        now = time.time()
+        with self._lock:
+            exp = self._revoked_grants.get(grant_id)
+            if exp is not None:
+                if exp >= now:
+                    return True
+                self._revoked_grants.pop(grant_id, None)
+        rec = self.store.get("grantrevoked", grant_id)
+        if rec is None:
+            return False
+        with self._lock:
+            self._revoked_grants[grant_id] = float(
+                rec.get("expires") or (now + REFRESH_TOKEN_TTL)
+            )
+        return True
+
+    def _revoke_grant(
+        self,
+        grant_id: str,
+        email: str = "",
+        client_id: str = "",
+        reason: str = "revoke",
+    ) -> None:
+        if not grant_id:
+            return
+        exp = time.time() + GRANT_MAX_AGE
+        self.store.put(
+            "grantrevoked",
+            grant_id,
+            {
+                "email": email,
+                "client_id": client_id,
+                "reason": reason,
+                "expires": exp,
+            },
+        )
+        with self._lock:
+            self._revoked_grants[grant_id] = exp
+            for h in [
+                h for h, r in self._access.items() if r.get("grant_id") == grant_id
+            ]:
+                self._access.pop(h, None)
+        for kind in ("access", "refresh"):
+            for name, r in list(self.store.items(kind)):
+                if r.get("grant_id") == grant_id:
+                    self.store.delete_name(kind, name)
+        audit(
+            "grant_revoked",
+            email=email or None,
+            client=client_id or None,
+            decision="revoked",
+            reason=reason,
         )
 
     def _access_record(self, token: str) -> dict[str, Any] | None:
@@ -557,6 +702,16 @@ class AuthServer:
             with self._lock:
                 self._access[h] = rec
         if rec["expires"] < time.time():
+            with self._lock:
+                self._access.pop(h, None)
+            return None
+        gstart = rec.get("grant_start")
+        if isinstance(gstart, (int, float)) and time.time() - gstart > GRANT_MAX_AGE:
+            with self._lock:
+                self._access.pop(h, None)
+            return None
+        gid = str(rec.get("grant_id") or "")
+        if gid and self._grant_revoked(gid):
             with self._lock:
                 self._access.pop(h, None)
             return None
@@ -600,13 +755,62 @@ class AuthServer:
 
     # -- discovery ---------------------------------------------------------------
 
-    @staticmethod
-    def base_url(request: Request) -> str:
-        proto = request.headers.get("x-forwarded-proto", request.url.scheme or "https")
-        host = request.headers.get("x-forwarded-host") or request.headers.get(
-            "host", ""
+    def base_url(self, request: Request) -> str:
+        pub = _canonical_public_url(self.public_url)
+        if pub:
+            return pub
+        # Never trust X-Forwarded-Host: Cloud Run passes client-supplied headers through.
+        proto = (
+            request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
         )
+        if proto not in ("https", "http"):
+            proto = (
+                request.url.scheme
+                if request.url.scheme in ("https", "http")
+                else "https"
+            )
+        host = (
+            request.headers.get("host") or request.url.netloc or "localhost"
+        ).strip()
+        if not _SAFE_HOST.match(host):
+            host = request.url.netloc or "localhost"
         return f"{proto}://{host}"
+
+    async def home(self, request: Request) -> Response:
+        base = self.base_url(request)
+        domain = self.users.domain
+        if not _wants_html(request.headers.get("accept", "")):
+            return PlainTextResponse(
+                f"skywalker-mcp: MCP endpoint at {base}/mcp (OAuth 2.1, {domain})\n"
+            )
+        atrium = _atrium_url(self.atrium_url)
+        atrium_line = (
+            f'<p>Prefer a web dashboard? Open <a href="{html.escape(atrium)}">Atrium</a> '
+            "to view your cloud projects alongside your other Research Computing resources.</p>"
+            if atrium
+            else ""
+        )
+        stamp = []
+        if self.rev:
+            stamp.append(f"rev <code>{html.escape(self.rev)}</code>")
+        if self.tools_version:
+            stamp.append(f"tools v{html.escape(self.tools_version)}")
+        stamp_line = (
+            f'<p class="n">Read-only service ({", ".join(stamp)}).</p>'
+            if stamp
+            else '<p class="n">Read-only service: Skywalker never modifies Google Cloud resources.</p>'
+        )
+        return _page(
+            "Skywalker MCP server",
+            f"""<p>This is the Model Context Protocol (MCP) server for <b>Skywalker</b>,
+read-only Google Cloud audit, cost and security reporting.</p>
+<p>Add this MCP server URL in your AI client (Claude, Gemini, Hermes):</p>
+<p><code>{html.escape(base)}/mcp</code></p>
+<p>You sign in with your <b>{html.escape(domain)}</b> Google account, and every tool
+reads Google Cloud as you. Only accounts on the Skywalker access list can sign in.</p>
+{atrium_line}{stamp_line}""",
+            atrium_url=atrium,
+        )
 
     async def protected_resource(self, request: Request) -> JSONResponse:
         base = self.base_url(request)
@@ -694,6 +898,8 @@ class AuthServer:
     # -- authorize -----------------------------------------------------------------
 
     async def authorize(self, request: Request) -> Response:
+        if request.method == "POST":
+            return await self._authorize_confirm(request)
         p = request.query_params
         client_id = p.get("client_id", "")
         ru = p.get("redirect_uri", "")
@@ -735,34 +941,102 @@ class AuthServer:
             "state": p.get("state", ""),
             "expires": time.time() + GRANT_WINDOW,
         }
-        google_url = self._google_url(request, pending, consent=False)
-        # A browser that has seen the explanation page goes straight to Google.
-        if request.cookies.get(SEEN_COOKIE) == "1":
-            return RedirectResponse(google_url, 302)
+        # Only pre-registered program clients may skip consent when this browser has
+        # already confirmed the exact (client_id, redirect_hostname) pair. Dynamically
+        # registered RFC 7591 clients always require explicit POST confirmation.
+        seen_name = _seen_cookie_name(client["client_id"], ru)
+        if client.get("program") and request.cookies.get(seen_name) == "1":
+            return RedirectResponse(
+                self._google_url(request, pending, consent=False), 302
+            )
+        consent_id = secrets.token_urlsafe(24)
+        csrf = secrets.token_urlsafe(24)
+        self.store.put("consent", consent_id, {**pending, "csrf": csrf})
         host = urllib.parse.urlsplit(ru).hostname or ru
         domain = self.users.domain
+        dcr_note = (
+            ""
+            if client.get("program")
+            else '<p class="n">This client registered dynamically (not a pre-registered campus service). '
+            "Continue only if you just started this sign-in from that app.</p>"
+        )
         resp = _page(
             "Sign in to Skywalker",
             f"""<p><b>{html.escape(str(client.get("client_name") or "An MCP client"))}</b>
 wants to use the Skywalker MCP server as you.</p>
 <p>You will sign in with your <b>{html.escape(domain)}</b> Google account. Afterwards
 you are sent back to <code>{html.escape(host)}</code>.</p>
-<p>Skywalker reads your Google Cloud projects <b>as you</b>: it sees only what your
+{dcr_note}<p>Skywalker reads your Google Cloud projects <b>as you</b>: it sees only what your
 own account can see, and Google's audit logs show your name. Google will ask you to
 allow Cloud Platform access; Skywalker only reads (it has no tools that change
 anything), and you can sign out at any time to delete its copy of your access.</p>
 <p>Only people on the Skywalker access list can finish signing in. Skywalker never
 sees your Google password.</p>
-<p><a class="b" href="{html.escape(google_url)}">Continue with Google</a></p>""",
+<form method="post" action="/authorize">
+<input type="hidden" name="consent" value="{html.escape(consent_id)}">
+<input type="hidden" name="csrf" value="{html.escape(csrf)}">
+<p><button class="b" type="submit">Continue with Google</button></p>
+</form>""",
+            atrium_url=self.atrium_url,
         )
         resp.set_cookie(
-            SEEN_COOKIE,
-            "1",
-            max_age=365 * 86400,
+            CONSENT_CSRF_COOKIE,
+            csrf,
+            max_age=GRANT_WINDOW,
+            path="/authorize",
             httponly=True,
             secure=self.base_url(request).startswith("https://"),
             samesite="lax",
         )
+        return resp
+
+    async def _authorize_confirm(self, request: Request) -> Response:
+        base = self.base_url(request)
+        origin = request.headers.get("origin", "").strip().rstrip("/")
+        if origin and origin != base.rstrip("/"):
+            return PlainTextResponse("cross-origin consent refused", status_code=403)
+        try:
+            form = await request.form()
+        except Exception:
+            return PlainTextResponse("form body required", status_code=400)
+        consent_id = str(form.get("consent", ""))
+        rec = self.store.pop("consent", consent_id) if consent_id else None
+        if rec is None:
+            return PlainTextResponse(
+                "invalid or expired consent; start again", status_code=400
+            )
+        cookie_csrf = request.cookies.get(CONSENT_CSRF_COOKIE, "")
+        form_csrf = str(form.get("csrf", ""))
+        want_csrf = str(rec.get("csrf", ""))
+        if (
+            not want_csrf
+            or not cookie_csrf
+            or not secrets.compare_digest(cookie_csrf, want_csrf)
+            or not secrets.compare_digest(form_csrf, want_csrf)
+        ):
+            return PlainTextResponse(
+                "invalid consent session; start again", status_code=403
+            )
+        client = self.lookup_client(str(rec.get("client_id", "")))
+        if client is None:
+            return PlainTextResponse(
+                "unknown client_id; register again", status_code=400
+            )
+        pending = {k: v for k, v in rec.items() if k != "csrf"}
+        google_url = self._google_url(request, pending, consent=False)
+        resp = RedirectResponse(google_url, 302)
+        secure = base.startswith("https://")
+        resp.delete_cookie(CONSENT_CSRF_COOKIE, path="/authorize")
+        if client.get("program"):
+            resp.set_cookie(
+                _seen_cookie_name(client["client_id"], str(pending["redirect_uri"])),
+                "1",
+                max_age=SEEN_COOKIE_MAX_AGE,
+                path="/authorize",
+                httponly=True,
+                secure=secure,
+                samesite="lax",
+            )
         return resp
 
     def _google_url(
@@ -827,6 +1101,7 @@ sees your Google password.</p>
                 f"<p>{message}</p><p>If you think this is wrong, contact "
                 '<a href="mailto:forsythc@ucr.edu">forsythc@ucr.edu</a>.</p>',
                 status=403,
+                atrium_url=self.atrium_url,
             )
 
         if not claims.get("email_verified"):
@@ -925,32 +1200,65 @@ sees your Google password.</p>
                 return _oauth_error("invalid_grant", "PKCE verification failed")
             if self.users.lookup(rec["email"]) is None:
                 return _oauth_error("invalid_grant", "user is no longer allowed")
-            return self._issue(rec["client_id"], rec["email"])
+            return self._issue(
+                rec["client_id"],
+                rec["email"],
+                grant_id=secrets.token_urlsafe(24),
+                grant_start=time.time(),
+            )
 
         if grant == "refresh_token":
             rt = str(form.get("refresh_token", ""))
-            rec = self.store.get("refresh", _hash(rt))
-            if rec is None:
+            if not rt:
                 return _oauth_error("invalid_grant", "refresh token unknown or expired")
-            # Bound to its client. A public client must send client_id; one that
-            # leaves it out is accepted (some connectors do) but audited.
-            if client_id and client_id != rec["client_id"]:
-                return _oauth_error(
-                    "invalid_grant", "refresh token belongs to another client"
-                )
-            secret_err = self._check_secret(rec["client_id"], client_secret)
-            if secret_err:
-                return secret_err
-            if self.store.pop("refresh", _hash(rt)) is None:  # rotate; lost race
-                return _oauth_error("invalid_grant", "refresh token already used")
-            if not client_id:
-                audit(
-                    "refresh",
-                    email=rec["email"],
-                    client=rec["client_id"],
-                    decision="allowed",
-                    note="no client_id sent",
-                )
+            with self._refresh_lock:
+                rec = self.store.get("refresh", _hash(rt))
+                if rec is None:
+                    used = self.store.get("refreshused", _hash(rt))
+                    if used is not None:
+                        self._revoke_grant(
+                            str(used.get("grant_id") or ""),
+                            str(used.get("email") or ""),
+                            str(used.get("client_id") or ""),
+                            reason="refresh_reuse",
+                        )
+                    return _oauth_error(
+                        "invalid_grant", "refresh token unknown or expired"
+                    )
+                now = time.time()
+                gid = str(rec.get("grant_id") or "")
+                gstart = rec.get("grant_start")
+                if (gid and self._grant_revoked(gid)) or (
+                    isinstance(gstart, (int, float)) and now - gstart > GRANT_MAX_AGE
+                ):
+                    self.store.delete("refresh", _hash(rt))
+                    return _oauth_error(
+                        "invalid_grant",
+                        "grant expired or revoked; sign in again",
+                    )
+                # Bound to its client: client_id is always required on refresh_token.
+                if not client_id or client_id != rec["client_id"]:
+                    return _oauth_error(
+                        "invalid_grant", "refresh token belongs to another client"
+                    )
+                secret_err = self._check_secret(rec["client_id"], client_secret)
+                if secret_err:
+                    return secret_err
+                if self.store.pop("refresh", _hash(rt)) is None:  # rotate; lost race
+                    return _oauth_error("invalid_grant", "refresh token already used")
+                if gid:
+                    self.store.put(
+                        "refreshused",
+                        _hash(rt),
+                        {
+                            "email": rec["email"],
+                            "client_id": rec["client_id"],
+                            "grant_id": gid,
+                            "expires": max(
+                                float(rec["expires"]), now + REFRESH_TOKEN_TTL
+                            ),
+                        },
+                    )
             email, cid = rec["email"], rec["client_id"]
             if self.users.lookup(email) is None:
                 audit(
@@ -970,7 +1278,12 @@ sees your Google password.</p>
                     reason="client_not_allowed",
                 )
                 return _oauth_error("invalid_grant", "client is not allowed")
-            return self._issue(cid, email)
+            return self._issue(
+                cid,
+                email,
+                grant_id=gid or None,
+                grant_start=float(gstart) if isinstance(gstart, (int, float)) else now,
+            )
 
         return _oauth_error(
             "unsupported_grant_type", "authorization_code or refresh_token"
@@ -1001,11 +1314,25 @@ sees your Google password.</p>
             form = await request.form()
         except Exception:
             return Response(status_code=200)
-        h = _hash(str(form.get("token", "")))
+        raw_tok = str(form.get("token", ""))
+        if not raw_tok:
+            return Response(status_code=200)
+        h = _hash(raw_tok)
+        rec = self.store.get("access", h) or self.store.get("refresh", h)
+        if rec is None:
+            with self._lock:
+                rec = self._access.get(h)
         with self._lock:
             self._access.pop(h, None)
         self.store.delete("access", h)
         self.store.delete("refresh", h)
+        if rec and rec.get("grant_id"):
+            self._revoke_grant(
+                str(rec["grant_id"]),
+                str(rec.get("email") or ""),
+                str(rec.get("client_id") or ""),
+                reason="revoke",
+            )
         return Response(status_code=200)  # RFC 7009: always 200
 
     async def signout(self, request: Request) -> JSONResponse:
@@ -1017,11 +1344,12 @@ sees your Google password.</p>
             return _oauth_error("invalid_token", "no identity", 401)
         await asyncio.to_thread(self.google_tokens.forget, ident.email)
         ended = 0
-        for kind in ("access", "refresh"):
+        for kind in ("access", "refresh", "refreshused"):
             for name, rec in list(self.store.items(kind)):
                 if rec.get("email") == ident.email:
                     self.store.delete_name(kind, name)
-                    ended += 1
+                    if kind in ("access", "refresh"):
+                        ended += 1
         with self._lock:
             for h in [
                 h for h, r in self._access.items() if r.get("email") == ident.email
@@ -1062,12 +1390,13 @@ sees your Google password.</p>
     def routes(self) -> list[Route]:
         prm = self.protected_resource
         return [
+            Route("/", self.home, methods=["GET", "HEAD"]),
             Route("/.well-known/oauth-protected-resource", prm),
             Route("/.well-known/oauth-protected-resource/mcp", prm),
             Route("/.well-known/oauth-protected-resource/sse", prm),
             Route("/.well-known/oauth-authorization-server", self.authorization_server),
             Route("/register", self.register, methods=["POST"]),
-            Route("/authorize", self.authorize),
+            Route("/authorize", self.authorize, methods=["GET", "POST"]),
             Route("/oauth/callback", self.oauth_callback),
             Route("/token", self.token, methods=["POST"]),
             Route("/revoke", self.revoke, methods=["POST"]),
@@ -1091,6 +1420,13 @@ class BearerAuth:
             return
         path = scope.get("path", "")
         if path in PUBLIC_PATHS or path.startswith("/.well-known/"):
+            await self.app(scope, receive, send)
+            return
+        if (
+            path == "/"
+            and scope.get("method") in ("GET", "HEAD")
+            and _scope_wants_html(scope)
+        ):
             await self.app(scope, receive, send)
             return
         header = ""
@@ -1123,9 +1459,7 @@ class BearerAuth:
         self, scope: Scope, receive: Receive, send: Send, error: str
     ) -> None:
         request = Request(scope)
-        resource = (
-            f"{AuthServer.base_url(request)}/.well-known/oauth-protected-resource"
-        )
+        resource = f"{self.auth.base_url(request)}/.well-known/oauth-protected-resource"
         resp = Response(
             status_code=401,
             headers={
@@ -1165,4 +1499,6 @@ def build_auth_from_env(
         google=Google(env["GOOGLE_OAUTH_CLIENT_ID"], env["GOOGLE_OAUTH_CLIENT_SECRET"]),
         rev=env.get("SKYWALKER_REV", ""),
         tools_version=tools_version,
+        public_url=env.get("SKYWALKER_PUBLIC_URL") or env.get("PUBLIC_URL") or "",
+        atrium_url=env.get("ATRIUM_URL") or env.get("SKYWALKER_ATRIUM_URL") or "",
     )
