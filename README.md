@@ -41,9 +41,9 @@ Tracks and aggregates generative model usage (Vertex AI, Publisher Models) acros
 *   **Pricing Map:** Dynamically parses model prices from `model_prices.csv` to calculate accurate estimated spend.
 *   **Fleet-Wide Summaries:** Aggregates costs, requests, and tokens, sortable by estimated cost or project ID, with full detailed nested tabular breakdowns.
 
-### 6. 🔌 Hosted MCP Server & A2A Agent (`mcp_server/`)
-Exposes 21 strictly read-only Google Cloud tools (`skywalker.intel`) over Streamable HTTP (`/mcp`) and A2A (`/a2a/`, `staff`+ by default):
-*   **Caller-Scoped GCP Access:** OAuth 2.1 + PKCE S256 (`POST /authorize` consent confirmation, grant-family refresh rotation, pinned `SKYWALKER_PUBLIC_URL`); every tool reads Google Cloud with the signed-in caller's own OAuth token, while the server's service account holds zero GCP data roles.
+### 6. 🔌 Hosted MCP Server (`mcp_server/`)
+Exposes 21 strictly read-only Google Cloud tools (`skywalker.intel`) over Streamable HTTP (`/mcp`):
+*   **Caller-Scoped GCP Access & Atrium Brokered Assertions:** OAuth 2.1 + PKCE S256 (`POST /authorize` consent confirmation, grant-family refresh rotation, pinned `SKYWALKER_PUBLIC_URL`) plus short-lived `atr1.*` ECDSA P-256 Atrium brokered assertions (`ATRIUM_BROKER_PUBKEY`, fail-closed, `exp - iat <= 360`, pre-registered `program_client` role ceiling and rate limits). Every tool reads Google Cloud with the signed-in caller's own OAuth token, while the server's service account holds zero GCP data roles. External A2A lives exclusively on Atrium Concierge.
 *   **Per-Researcher Scope & Allocation Fallback:** `read` callers are restricted to their listed `projects` in `users.yaml` and receive scoped monthly allocation/usage summaries (`project_allocations` + optional `SKYWALKER_PROJECT_USAGE_FILE`) when central Cloud Billing IAM is unavailable.
 *   **Full Specification & Setup:** See [`mcp_server/README.md`](mcp_server/README.md) and [`docs/SPEC.md`](docs/SPEC.md).
 

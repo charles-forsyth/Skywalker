@@ -291,8 +291,11 @@ def parse(text: str) -> UsersConfig:
                 raise UsersFileError(
                     f"clients[{i}]: client_secret_sha256 must be 64 hex characters"
                 )
-        uris = tuple(str(x) for x in (c.get("redirect_uris") or []))
-        if not uris or not all(valid_redirect(x) for x in uris):
+        raw_uris = c.get("redirect_uris")
+        if raw_uris is not None and not isinstance(raw_uris, list):
+            raise UsersFileError(f"clients[{i}]: redirect_uris must be a list")
+        uris = tuple(str(x) for x in (raw_uris or []))
+        if not all(valid_redirect(x) for x in uris):
             raise UsersFileError(
                 f"clients[{i}]: redirect_uris must be https or http loopback"
             )

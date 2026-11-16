@@ -74,9 +74,10 @@ skywalker/
     *   **Project scope** (`mcp_server/scope.py`): a `read` user may ask only about their
         `projects` in users.yaml, checked before any Google call. Every per-project tool
         resolves `project_id` through `_pid()`; a new per-project tool must too.
-    *   **A2A agent** (`mcp_server/agent.py`, Gemini Enterprise): tools run in-process as
-        the caller via `GuardedMCP.acting_as`, never as the service account. Stay on
-        `a2a-sdk` 0.3.x (Gemini Enterprise speaks A2A 0.3).
+    *   **Atrium brokered assertions (`atr1.*`):** `mcp_server/auth.py` verifies short-lived
+        ECDSA P-256 assertions (`ATRIUM_BROKER_PUBKEY` fail-closed, `exp - iat <= 360`) mapped
+        to pre-registered `program_client`s in `users.yaml`. Standalone `/a2a/` was removed in
+        SPEC 1.3; external A2A lives exclusively on Atrium Concierge.
 
 ## Current State (as of Dec 23, 2025)
 

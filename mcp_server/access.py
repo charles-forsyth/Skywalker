@@ -13,9 +13,8 @@ Every tool must be registered with `guarded_tool(role=...)`. A tool without a
 role is refused for everyone (`TOOL_ROLES` is the allowlist), so a new tool is
 never exposed by accident.
 
-The caller's identity comes from the ASGI scope, put there by `auth.BearerAuth`.
-The A2A agent (agent.py) runs tools in-process with `acting_as(identity)`, so its
-calls pass the same role check, limits and audit as MCP calls (`channel=a2a`).
+The caller's identity comes from the ASGI scope, put there by `auth.BearerAuth`
+(either an OAuth 2.1 access token or an `atr1.*` Atrium brokered assertion).
 Skywalker tools act on Google Cloud as the caller, so a tool asks
 `caller_gcp()` for a `skywalker.intel.Gcp` built on the caller's own Google token.
 There is no stdio identity: without a signed-in caller there is no Google token.
@@ -23,10 +22,8 @@ There is no stdio identity: without a signed-in caller there is no Google token.
 
 from __future__ import annotations
 
-import contextlib
 import time
-from collections.abc import Callable, Iterator, Sequence
-from contextvars import ContextVar
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from auth import (
@@ -50,11 +47,6 @@ from skywalker.intel import Gcp, GcpError
 
 # tool name -> lowest role that may call it
 TOOL_ROLES: dict[str, str] = {}
-
-# Set only by agent.py (inside one A2A request, from the identity BearerAuth put
-# in the ASGI scope): the person the agent's in-process tool calls run as.
-_ACTING: ContextVar[Identity | None] = ContextVar("skywalker_acting", default=None)
-_CHANNEL: ContextVar[str] = ContextVar("skywalker_channel", default="mcp")
 
 # Each Skywalker call fans out to many Google API calls as the caller, so the
 # budgets are lower than Nexus's: 120/min per person, 60/min per client, and 8
@@ -136,20 +128,7 @@ class GuardedMCP(FastMCP):
 
         return deco
 
-    @contextlib.contextmanager
-    def acting_as(self, ident: Identity, channel: str = "a2a") -> Iterator[None]:
-        """Run tool calls in-process as this person (the A2A agent)."""
-        t1, t2 = _ACTING.set(ident), _CHANNEL.set(channel)
-        try:
-            yield
-        finally:
-            _ACTING.reset(t1)
-            _CHANNEL.reset(t2)
-
     def identity(self) -> Identity | None:
-        acting = _ACTING.get()
-        if acting is not None:
-            return acting
         try:
             req = self._mcp_server.request_context.request
         except LookupError:
@@ -183,7 +162,8 @@ class GuardedMCP(FastMCP):
             "role": ident.role if ident else None,
             "client": ident.client_id if ident else None,
             "client_name": ident.client_name if ident else None,
-            "channel": _CHANNEL.get(),
+            "via": (f"program:{ident.client_id}" if ident and ident.program else None),
+            "channel": "mcp",
         }
         needed = TOOL_ROLES.get(name)
         if ident is None:
