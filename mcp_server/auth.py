@@ -34,9 +34,10 @@ Endpoints:
 
 Program clients in users.yaml are public (PKCE) unless they carry
 `client_secret_sha256`. Gemini Enterprise is such a confidential client: its
-connector forms send a client secret (in the body or as HTTP Basic), and its A2A
-authorization URL carries no PKCE challenge, so a confidential client may skip
-PKCE and must prove the secret at /token instead.
+connector forms send a client secret (in the body or as HTTP Basic), so a
+confidential client may skip PKCE and must prove the secret at /token instead.
+Pre-registered program clients (such as `skywalker-atrium`) may also authenticate
+with short-lived `atr1.*` ECDSA P-256 Atrium brokered assertions.
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ import hashlib
 import html
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -60,6 +62,9 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 import httpx
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, utils
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from starlette.requests import Request
@@ -101,6 +106,14 @@ GOOGLE_SCOPES = f"openid email {GCP_SCOPE}"
 # Access tokens are also minted with an explicit `scope` so they carry only
 # GCP_SCOPE even when an older grant holds more.
 
+DEFAULT_ATRIUM_BROKER_ISSUER = "https://atrium-staging-492106370716.us-central1.run.app"
+BROKER_MAX_LEN = 2048
+BROKER_CLOCK_SKEW = 30
+BROKER_MAX_TTL = 360
+_P256_ORDER = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+_B64URL_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_B64URL_PADDED_RE = re.compile(r"^[A-Za-z0-9_-]+={0,2}$")
+
 PUBLIC_PATHS = {
     "/authorize",
     "/oauth/callback",
@@ -108,9 +121,6 @@ PUBLIC_PATHS = {
     "/register",
     "/revoke",
     "/health",
-    # The A2A agent card is public (it names the sign-in endpoints); /a2a/ is not.
-    "/a2a/.well-known/agent-card.json",
-    "/a2a/.well-known/agent.json",
 }
 
 
@@ -131,6 +141,7 @@ class Identity:
     # users.yaml `projects`: for `read`, the only projects they may ask about;
     # for staff/admin, where their default focus comes from.
     projects: tuple[str, ...] = ()
+    program: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -536,6 +547,59 @@ def _page(
 # --- The authorization server --------------------------------------------------
 
 
+def _b64url_decode(s: str) -> bytes | None:
+    """Decode strict unpadded URL-safe base64 (RFC 4648 §5, RawURLEncoding)."""
+    if not s or len(s) % 4 == 1 or not _B64URL_RE.match(s):
+        return None
+    raw = base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+    if base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii") != s:
+        return None
+    return raw
+
+
+def _parse_broker_pubkey(raw_b64: str) -> ec.EllipticCurvePublicKey | None:
+    """Parse 65-byte uncompressed P-256 SEC1 point (0x04 || X || Y) from base64url."""
+    s = (raw_b64 or "").strip()
+    if not s or not _B64URL_PADDED_RE.match(s):
+        return None
+    raw = _b64url_decode(s.rstrip("="))
+    if raw is None or len(raw) != 65 or raw[0] != 0x04:
+        return None
+    try:
+        return ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), raw)
+    except ValueError:
+        return None
+
+
+def _verify_broker_sig(
+    pubkey: ec.EllipticCurvePublicKey, signing_input: bytes, sig_raw: bytes
+) -> bool:
+    if len(sig_raw) != 64:
+        return False
+    r = int.from_bytes(sig_raw[:32], "big")
+    s = int.from_bytes(sig_raw[32:], "big")
+    if not (0 < r < _P256_ORDER and 0 < s < _P256_ORDER):
+        return False
+    try:
+        pubkey.verify(
+            utils.encode_dss_signature(r, s),
+            signing_input,
+            ec.ECDSA(hashes.SHA256()),
+        )
+    except InvalidSignature:
+        return False
+    return True
+
+
+def _unix_seconds(val: Any) -> float | None:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        return None
+    f = float(val)
+    if not math.isfinite(f):
+        return None
+    return f
+
+
 class AuthServer:
     def __init__(
         self,
@@ -546,6 +610,9 @@ class AuthServer:
         tools_version: str = "",
         public_url: str = "",
         atrium_url: str = "",
+        broker_pubkey: str = "",
+        broker_issuer: str = "",
+        broker_audience: str = "",
     ) -> None:
         self.users = users
         self.store = store
@@ -555,9 +622,15 @@ class AuthServer:
         self.tools_version = tools_version
         self.public_url = _canonical_public_url(public_url) if public_url else ""
         self.atrium_url = _valid_http_url(atrium_url)
+        self.broker_pubkey = broker_pubkey.strip()
+        self.broker_issuer = broker_issuer.strip()
+        self.broker_audience = broker_audience.strip()
         self.limiter = RateLimiter()
         self._access: dict[str, dict[str, Any]] = {}  # hash -> record (cache)
         self._revoked_grants: dict[str, float] = {}  # grant_id -> expires
+        self._broker_key_cache: tuple[str, ec.EllipticCurvePublicKey | None] | None = (
+            None
+        )
         self._lock = threading.Lock()
         self._refresh_lock = threading.Lock()
 
@@ -568,6 +641,8 @@ class AuthServer:
         if not client_id:
             return None
         cfg = self.users.config()
+        if client_id in cfg.disabled_clients:
+            return None
         pc = cfg.by_client.get(client_id)
         if pc is not None:
             if pc.disabled:
@@ -581,8 +656,6 @@ class AuthServer:
                 "program": True,
                 "secret_sha256": pc.secret_sha256,
             }
-        if client_id in cfg.disabled_clients:
-            return None
         return self.store.get("client", client_id)
 
     # -- tokens ----------------------------------------------------------------
@@ -717,8 +790,155 @@ class AuthServer:
             return None
         return rec
 
-    def resolve(self, token: str) -> tuple[Identity | None, str]:
+    def _broker_pubkey_obj(self) -> ec.EllipticCurvePublicKey | None:
+        raw = (self.broker_pubkey or os.environ.get("ATRIUM_BROKER_PUBKEY", "")).strip()
+        if not raw:
+            return None
+        with self._lock:
+            cached = self._broker_key_cache
+            if cached is not None and cached[0] == raw:
+                return cached[1]
+        parsed = _parse_broker_pubkey(raw)
+        if parsed is None:
+            logger.error("ATRIUM_BROKER_PUBKEY is malformed; failing closed")
+        with self._lock:
+            self._broker_key_cache = (raw, parsed)
+        return parsed
+
+    def _expected_broker_audiences(self, request: Request | None = None) -> set[str]:
+        out: set[str] = set()
+        raw_aud = (
+            self.broker_audience or os.environ.get("ATRIUM_BROKER_AUDIENCE", "")
+        ).strip()
+        if raw_aud:
+            cfg_aud = _valid_http_url(raw_aud)
+            if not cfg_aud:
+                return set()
+            out.add(cfg_aud.rstrip("/"))
+        if request is not None:
+            base = self.base_url(request)
+        else:
+            try:
+                base = _canonical_public_url(self.public_url)
+            except ValueError:
+                base = ""
+        if base:
+            out.add(f"{base.rstrip('/')}/mcp")
+        return out
+
+    def _resolve_broker(
+        self, token: str, request: Request | None = None
+    ) -> tuple[Identity | None, str]:
+        pubkey = self._broker_pubkey_obj()
+        if pubkey is None:
+            return None, "invalid_token"
+        if len(token) > BROKER_MAX_LEN or not token.isascii():
+            return None, "invalid_token"
+        parts = token.split(".")
+        if len(parts) != 3 or parts[0] != "atr1" or not parts[1] or not parts[2]:
+            return None, "invalid_token"
+        sig_raw = _b64url_decode(parts[2])
+        if sig_raw is None:
+            return None, "invalid_token"
+        signing_input = f"atr1.{parts[1]}".encode("ascii")
+        if not _verify_broker_sig(pubkey, signing_input, sig_raw):
+            return None, "invalid_token"
+        payload_raw = _b64url_decode(parts[1])
+        if payload_raw is None:
+            return None, "invalid_token"
+        try:
+            claims = json.loads(payload_raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return None, "invalid_token"
+        if not isinstance(claims, dict):
+            return None, "invalid_token"
+
+        raw_iss = (
+            self.broker_issuer or os.environ.get("ATRIUM_BROKER_ISSUER", "")
+        ).strip()
+        expected_iss = _valid_http_url(
+            raw_iss if raw_iss else DEFAULT_ATRIUM_BROKER_ISSUER
+        ).rstrip("/")
+        iss = claims.get("iss")
+        if (
+            not expected_iss
+            or not isinstance(iss, str)
+            or not iss.strip()
+            or iss.rstrip("/") != expected_iss
+        ):
+            return None, "invalid_token"
+
+        expected_auds = self._expected_broker_audiences(request)
+        aud = claims.get("aud")
+        if (
+            not isinstance(aud, str)
+            or not aud.strip()
+            or aud.rstrip("/") not in expected_auds
+        ):
+            return None, "invalid_token"
+
+        iat = _unix_seconds(claims.get("iat"))
+        exp = _unix_seconds(claims.get("exp"))
+        if iat is None or exp is None:
+            return None, "invalid_token"
+        now = time.time()
+        if not (iat <= now + BROKER_CLOCK_SKEW and now <= exp + BROKER_CLOCK_SKEW):
+            return None, "invalid_token"
+        if not (0 < exp - iat <= BROKER_MAX_TTL):
+            return None, "invalid_token"
+
+        cid = claims.get("cid")
+        client = (
+            self.lookup_client(cid)
+            if isinstance(cid, str) and cid and cid == cid.strip()
+            else None
+        )
+        if client is None or not client.get("program"):
+            return None, "invalid_token"
+
+        sub = claims.get("sub")
+        domain = self.users.domain
+        if (
+            not isinstance(sub, str)
+            or not sub
+            or sub != sub.strip().lower()
+            or not sub.endswith("@" + domain)
+        ):
+            return None, "invalid_token"
+
+        user = self.users.lookup(sub)
+        if user is None:
+            if self.google_tokens.has(sub):
+                self.google_tokens.forget(sub)
+                audit(
+                    "google_token",
+                    email=sub,
+                    decision="revoked",
+                    reason="user_removed",
+                )
+            return None, "access_denied"
+
+        role = cap_role(user.role, client.get("max_role"))
+        return (
+            Identity(
+                email=user.email,
+                netid=user.netid,
+                role=role,
+                client_id=client["client_id"],
+                client_name=str(client.get("client_name") or ""),
+                calls_per_min=client.get("calls_per_min"),
+                projects=user.projects,
+                program=True,
+            ),
+            "",
+        )
+
+    def resolve(
+        self, token: str, request: Request | None = None
+    ) -> tuple[Identity | None, str]:
         """(identity, "") or (None, "invalid_token" | "access_denied")."""
+        if token.startswith("atr1."):
+            return self._resolve_broker(token, request=request)
         rec = self._access_record(token)
         if rec is None:
             return None, "invalid_token"
@@ -738,6 +958,7 @@ class AuthServer:
         if client is None:
             return None, "access_denied"
         role = cap_role(user.role, client.get("max_role"))
+        is_program = bool(client.get("program"))
         return (
             Identity(
                 email=user.email,
@@ -745,10 +966,9 @@ class AuthServer:
                 role=role,
                 client_id=client["client_id"],
                 client_name=str(client.get("client_name") or ""),
-                calls_per_min=client.get("calls_per_min")
-                if client.get("program")
-                else None,
+                calls_per_min=client.get("calls_per_min") if is_program else None,
                 projects=user.projects,
+                program=is_program,
             ),
             "",
         )
@@ -1437,7 +1657,7 @@ class BearerAuth:
         if not header.lower().startswith("bearer "):
             await self._challenge(scope, receive, send, "invalid_request")
             return
-        ident, err = self.auth.resolve(header[7:].strip())
+        ident, err = self.auth.resolve(header[7:].strip(), request=Request(scope))
         if ident is None:
             if err == "access_denied":
                 audit("request", path=path, decision="denied", reason="access_denied")
@@ -1501,4 +1721,7 @@ def build_auth_from_env(
         tools_version=tools_version,
         public_url=env.get("SKYWALKER_PUBLIC_URL") or env.get("PUBLIC_URL") or "",
         atrium_url=env.get("ATRIUM_URL") or env.get("SKYWALKER_ATRIUM_URL") or "",
+        broker_pubkey=env.get("ATRIUM_BROKER_PUBKEY", ""),
+        broker_issuer=env.get("ATRIUM_BROKER_ISSUER", ""),
+        broker_audience=env.get("ATRIUM_BROKER_AUDIENCE", ""),
     )

@@ -18,9 +18,15 @@ users:
   - {email: alice@example.edu, netid: alice, role: admin, projects: [rc-main-project]}
   - {email: bob@example.edu, netid: bob, role: read, projects: [lab-bob-project, "lab-bob-*"]}
 
-# Programs that sign in once as a person and keep their own token, capped at
-# max_role. Redirect URIs: https, or http on loopback (any port).
+# Programs that sign in once as a person and keep their own token, or call with
+# short-lived atr1.* Atrium brokered assertions, capped at max_role.
+# Redirect URIs (optional for broker-only clients): https, or http on loopback (any port).
 clients: []
+#  - id: skywalker-atrium
+#    name: Atrium
+#    max_role: admin
+#    calls_per_min: 120
+#    redirect_uris: ["https://atrium.example.edu/oauth/callback"]
 #  - id: skywalker-ultra
 #    name: Ultra
 #    max_role: staff

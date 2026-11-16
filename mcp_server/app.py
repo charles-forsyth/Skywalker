@@ -4,11 +4,11 @@
 - `/sse` + `/messages/`  the deprecated SSE transport, kept one release for
   clients configured with the old `/sse` URL.
 - OAuth endpoints and `/health`, `/whoami`, `/signout` from auth.py.
-- `/a2a/` the A2A agent for Gemini Enterprise (agent.py), when
-  SKYWALKER_BASE_URL and SKYWALKER_AGENT_PROJECT are set.
 
-Every MCP request passes `auth.BearerAuth` (Google sign-in, users.yaml checked
-per request), then `access.GuardedMCP` (role per tool, audit line per call).
+Every MCP request passes `auth.BearerAuth` (OAuth 2.1 access tokens and `atr1.*`
+Atrium brokered assertions; users.yaml checked per request), then `access.GuardedMCP`
+(role per tool, audit line per call). External A2A lives exclusively on Atrium
+Concierge (`/a2a/*` is not mounted here).
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ from auth import AuthServer, BearerAuth, build_auth_from_env
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
-from starlette.routing import BaseRoute
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 
@@ -41,7 +40,7 @@ class WellKnownCORS:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http":
             path = scope.get("path", "")
-            if path.startswith("/.well-known/") or path.startswith("/a2a/.well-known/"):
+            if path.startswith("/.well-known/"):
                 await self._cors(scope, receive, send)
                 return
         await self.app(scope, receive, send)
@@ -52,7 +51,6 @@ def build_app(
     auth: AuthServer,
     legacy_sse: bool = True,
     quota_project: str | None = None,
-    agent_routes: list[BaseRoute] | None = None,
 ) -> Starlette:
     mcp.google_tokens = auth.google_tokens
     mcp.quota_project = quota_project
@@ -63,8 +61,6 @@ def build_app(
     routes = [*auth.routes, *mcp.streamable_http_app().routes]
     if legacy_sse:
         routes += mcp.sse_app().routes
-    # The A2A agent (agent.py) for Gemini Enterprise: same auth, same tools.
-    routes += agent_routes or []
 
     @contextlib.asynccontextmanager
     async def lifespan(_: Starlette) -> AsyncIterator[None]:
@@ -83,19 +79,12 @@ def build_app(
 
 if __name__ == "__main__":
     import uvicorn
-    from agent import build_routes
     from server import TOOLS_VERSION, mcp
 
-    base_url = (
-        os.environ.get("SKYWALKER_PUBLIC_URL")
-        or os.environ.get("PUBLIC_URL")
-        or os.environ.get("SKYWALKER_BASE_URL", "")
-    )
     app = build_app(
         mcp,
         build_auth_from_env(tools_version=TOOLS_VERSION),
         quota_project=os.environ.get("SKYWALKER_QUOTA_PROJECT") or None,
-        agent_routes=build_routes(mcp, base_url) if base_url else [],
     )
     uvicorn.run(
         app,

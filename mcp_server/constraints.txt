@@ -1,7 +1,6 @@
 # Exact versions the MCP image runs (captured 2026-10-04 from the tested env).
 # Used as pip constraints by the Dockerfile so a rebuild cannot pull a new
 # major/minor silently. mcp stays on 1.27.2 with the Nexus server (SDK v2 later).
-a2a-sdk==0.3.26
 annotated-types==0.8.0
 anyio==4.15.1
 attrs==26.1.0

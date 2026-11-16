@@ -1,19 +1,17 @@
 """Project scope (who may ask about which project), focus, the Gemini Enterprise
-confidential client, and the A2A agent end to end with a fake model."""
+confidential client, and standalone /a2a/ removal."""
 
 from __future__ import annotations
 
 import base64
-import copy
 import json
 import urllib.parse
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 import scope
-from conftest import BASE, audit_lines, call, confirm_authorize, payload, pkce, sign_in
+from conftest import MCP_DIR, call, confirm_authorize, payload, pkce, sign_in
 from starlette.testclient import TestClient
 from users import ProjectUsage, UsersFileError, parse, project_allowed, project_fallback
 
@@ -387,260 +385,43 @@ def test_secret_must_be_sha256_in_users_file() -> None:
         parse(y)
 
 
-# --- A2A agent -----------------------------------------------------------------------
+# --- Standalone /a2a/ removed (consolidated onto Atrium Concierge) -------------------
 
 
-class FakeModel:
-    """Scripted Gemini: each turn returns the next list of parts."""
-
-    def __init__(self, script: list[list[dict[str, Any]]]) -> None:
-        self.script = list(script)
-        self.seen: list[dict[str, Any]] = []
-
-    async def generate(
-        self, system: str, contents: list[dict[str, Any]], tools: list[dict[str, Any]]
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        self.seen.append(
-            {
-                "system": system,
-                "contents": copy.deepcopy(contents),
-                "tools": [t["name"] for t in tools],
-            }
-        )
-        parts = self.script.pop(0) if self.script else [{"text": "done"}]
-        return parts, {"totalTokenCount": 10}
-
-
-@pytest.fixture
-def a2a(env: dict[str, Any]) -> Iterator[dict[str, Any]]:
-    import agent
-    import server
-    from app import build_app
-
-    model = FakeModel([])
-    env["client"].__exit__(None, None, None)
-    client = TestClient(
-        build_app(
-            server.mcp,
-            env["server"],
-            quota_project="quota-proj",
-            agent_routes=agent.build_routes(server.mcp, BASE, model),
-        ),
-        base_url=BASE,
-    )
-    client.__enter__()
-    env["client"] = client
-    env["model"] = model
-    yield env
-    client.__exit__(None, None, None)
-
-
-def _send(c: TestClient, tok: str | None, text: str, ctx: str = "ctx-1") -> Any:
-    headers = {"Content-Type": "application/json"}
-    if tok:
-        headers["Authorization"] = f"Bearer {tok}"
-    return c.post(
-        "/a2a/",
-        headers=headers,
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "message/send",
-            "params": {
-                "message": {
-                    "role": "user",
-                    "messageId": "m-" + text[:8],
-                    "contextId": ctx,
-                    "parts": [{"kind": "text", "text": text}],
-                }
-            },
-        },
-    )
-
-
-def _answer(r: Any) -> str:
-    assert r.status_code == 200, r.text
-    res = r.json()["result"]
-    assert res["status"]["state"] == "completed", res
-    return "".join(p["text"] for a in res["artifacts"] for p in a["parts"])
-
-
-def test_agent_card_is_public_and_points_at_sign_in(a2a: dict[str, Any]) -> None:
-    c = a2a["client"]
-    for path in ("/a2a/.well-known/agent-card.json", "/.well-known/agent-card.json"):
-        card = c.get(path).json()
-        assert card["url"] == f"{BASE}/a2a/" and card["protocolVersion"] == "0.3.0"
-        flow = card["securitySchemes"]["skywalker"]["flows"]["authorizationCode"]
-        assert flow["authorizationUrl"] == f"{BASE}/authorize"
-        assert flow["tokenUrl"] == f"{BASE}/token"
-        assert card["iconUrl"].startswith("data:image/svg+xml;base64,")
-
-
-def test_agent_needs_a_skywalker_token(a2a: dict[str, Any]) -> None:
-    c = a2a["client"]
-    assert _send(c, None, "hi").status_code == 401
-    assert _send(c, "swa_not-a-token", "hi").status_code == 401
-    assert a2a["model"].seen == []
-
-
-def test_a2a_requires_staff_by_default(a2a: dict[str, Any]) -> None:
-    c = a2a["client"]
-    reader = sign_in(a2a, "nolab@ucr.edu")["access_token"]
-    for path in ("/a2a/", "/a2a"):
-        r = c.post(
-            path,
-            headers={"Authorization": f"Bearer {reader}"},
-            json={"jsonrpc": "2.0", "id": 1, "method": "message/send", "params": {}},
-        )
-        assert r.status_code == 403 and r.json()["error"] == "access_denied"
-    # Staff capped to read by a program client is also refused at /a2a/.
-    capped = sign_in(
-        a2a,
-        "staffer@ucr.edu",
-        client_id="skywalker-ultra",
-        redirect="http://127.0.0.1:41234/callback",
-    )["access_token"]
-    assert _send(c, capped, "hello").status_code == 403
-    assert a2a["model"].seen == []
-    lines = [ln for ln in audit_lines(a2a) if ln["event"] == "a2a"]
-    assert lines and all(
-        ln["decision"] == "denied" and ln["reason"] == "needs_staff" for ln in lines
-    )
-
-    # Staff and admin callers succeed by default.
-    staffer = sign_in(a2a, "staffer@ucr.edu")["access_token"]
-    a2a["model"].script = [[{"text": "staff ok"}]]
-    assert _answer(_send(c, staffer, "status?")) == "staff ok"
-
-
-def test_agent_tools_run_as_the_caller_with_scope_and_audit(
-    a2a: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+def test_standalone_a2a_unmounted_and_agent_module_removed(
+    env: dict[str, Any],
 ) -> None:
-    monkeypatch.setenv("SKYWALKER_A2A_MIN_ROLE", "read")
-    _cfg(monkeypatch)
-    seen = _bq_ok(a2a["cloud"])
-    c, model = a2a["client"], a2a["model"]
-    mike = sign_in(a2a, "mikek@ucr.edu")["access_token"]
-    model.script = [
-        [
-            {"functionCall": {"name": "skywalker_spend", "args": {}, "id": "1"}},
-            {
-                "functionCall": {
-                    "name": "skywalker_spend",
-                    "args": {"project_id": "someone-elses-proj"},
-                    "id": "2",
-                }
-            },
-            {"functionCall": {"name": "skywalker_fleet", "args": {}, "id": "3"}},
-        ],
-        [{"text": "Your lab spent $5 this month."}],
-    ]
-    audit_lines(a2a)
-    assert _answer(_send(c, mike, "How much did we spend?")) == (
-        "Your lab spent $5 this month."
-    )
-    # the model saw only Mike's tools, and his scope in the instructions
-    first = model.seen[0]
-    assert (
-        "skywalker_fleet" not in first["tools"] and "skywalker_spend" in first["tools"]
-    )
-    assert "lab-one-proj" in first["system"] and "mikek@ucr.edu" in first["system"]
-    # the tool results it got back: one answer, two refusals
-    results = [
-        p["functionResponse"]["response"]
-        for p in model.seen[1]["contents"][-1]["parts"]
-    ]
-    assert "result" in results[0]
-    assert "not one of your Skywalker projects" in results[1]["error"]
-    assert "needs the 'staff' role" in results[2]["error"]
-    # Google was asked once, about Mike's project, with Mike's own token
-    assert _projects_of(seen) == ["lab-one-proj"]
-    assert {x["token"] for x in a2a["cloud"].calls} == {"ga-mikek@ucr.edu-0"}
-    lines = audit_lines(a2a)
-    tools = [ln for ln in lines if ln["event"] == "tool"]
-    # the three calls run in parallel, so compare without order
-    assert sorted(ln["decision"] for ln in tools) == ["allowed", "denied", "error"]
-    assert all(
-        ln["channel"] == "a2a" and ln["email"] == "mikek@ucr.edu" for ln in tools
-    )
-    done = [ln for ln in lines if ln["event"] == "a2a"]
-    assert done and done[0]["decision"] == "allowed" and done[0]["tokens"] == 20
+    assert not (MCP_DIR / "agent.py").exists()
+    c = env["client"]
+    # Unauthenticated /a2a/* paths fail closed with 401 and carry no CORS wildcard.
+    for path in (
+        "/a2a",
+        "/a2a/",
+        "/a2a/.well-known/agent-card.json",
+        "/a2a/.well-known/agent.json",
+    ):
+        r_get = c.get(path, headers={"Origin": "https://evil.example"})
+        assert r_get.status_code == 401, path
+        assert "access-control-allow-origin" not in r_get.headers, path
+        r_post = c.post(
+            path, json={"jsonrpc": "2.0", "id": 1, "method": "message/send"}
+        )
+        assert r_post.status_code == 401, path
 
+    # /.well-known/agent-card.json is not mounted (404).
+    assert c.get("/.well-known/agent-card.json").status_code == 404
 
-def test_agent_remembers_the_conversation_per_person(a2a: dict[str, Any]) -> None:
-    c, model = a2a["client"], a2a["model"]
-    chuck = sign_in(a2a, "forsythc@ucr.edu")["access_token"]
-    staffer = sign_in(a2a, "staffer@ucr.edu")["access_token"]
-    model.script = [
-        [{"text": "first answer"}],
-        [{"text": "second"}],
-        [{"text": "staffer"}],
-    ]
-    _answer(_send(c, chuck, "question one"))
-    _answer(_send(c, chuck, "question two"))
-    texts = [p["text"] for t in model.seen[1]["contents"] for p in t["parts"]]
-    assert texts == ["question one", "first answer", "question two"]
-    # same context id from another person starts fresh
-    _answer(_send(c, staffer, "question three"))
-    assert len(model.seen[2]["contents"]) == 1
-
-
-def test_agent_tasks_are_private(a2a: dict[str, Any]) -> None:
-    c, model = a2a["client"], a2a["model"]
-    chuck = sign_in(a2a, "forsythc@ucr.edu")["access_token"]
-    staffer = sign_in(a2a, "staffer@ucr.edu")["access_token"]
-    model.script = [[{"text": "private answer"}]]
-    task_id = _send(c, chuck, "hello").json()["result"]["id"]
-
-    def get(tok: str) -> Any:
-        return c.post(
-            "/a2a/",
-            headers={"Authorization": f"Bearer {tok}"},
-            json={
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tasks/get",
-                "params": {"id": task_id},
-            },
-        ).json()
-
-    assert get(chuck)["result"]["id"] == task_id
-    assert "error" in get(staffer) and "private answer" not in json.dumps(get(staffer))
-
-
-def test_agent_rate_limit(a2a: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    import agent
-
-    monkeypatch.setattr(agent, "MESSAGES_PER_MIN", 2)
-    c = a2a["client"]
-    tok = sign_in(a2a, "staffer@ucr.edu")["access_token"]
-    states = [
-        _send(c, tok, f"q{i}").json()["result"]["status"]["state"] for i in range(3)
-    ]
-    assert states == ["completed", "completed", "failed"]
-
-
-def test_agent_stops_after_max_rounds(a2a: dict[str, Any]) -> None:
-    import agent
-
-    c, model = a2a["client"], a2a["model"]
-    tok = sign_in(a2a, "forsythc@ucr.edu")["access_token"]
-    loop = [{"functionCall": {"name": "skywalker_whoami", "args": {}}}]
-    model.script = [loop] * (agent.MAX_ROUNDS + 2)
-    assert "more steps" in _answer(_send(c, tok, "loop forever"))
-    assert len(model.seen) == agent.MAX_ROUNDS
-
-
-def test_removed_user_loses_the_agent_too(a2a: dict[str, Any]) -> None:
-    c = a2a["client"]
-    tok = sign_in(a2a, "staffer@ucr.edu")["access_token"]
-    a2a["users_file"].write_text(
-        a2a["users_file"]
-        .read_text()
-        .replace("role: staff", "role: staff, disabled: true")
-    )
-    a2a["server"].users.recheck = 0
-    assert _send(c, tok, "still there?").status_code == 403
+    # Even with a valid staff Bearer token, /a2a/* is unmounted (404).
+    staffer = sign_in(env, "staffer@ucr.edu")["access_token"]
+    auth_hdr = {"Authorization": f"Bearer {staffer}"}
+    for method, path in (
+        ("POST", "/a2a"),
+        ("POST", "/a2a/"),
+        ("GET", "/a2a/.well-known/agent-card.json"),
+        ("GET", "/a2a/.well-known/agent.json"),
+    ):
+        r_auth = c.request(method, path, headers=auth_hdr)
+        assert r_auth.status_code == 404, (method, path)
 
 
 def test_read_user_stored_all_does_not_count(env: dict[str, Any]) -> None:

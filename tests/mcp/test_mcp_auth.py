@@ -1046,6 +1046,21 @@ def test_deploy_script_syntax_and_legacy_bucket_iam_lockdown(tmp_path: Path) -> 
     assert subprocess.run(["bash", "-n", str(deploy_sh)], check=False).returncode == 0
     text = deploy_sh.read_text()
     assert "SKYWALKER_PUBLIC_URL=" in text
+    assert (
+        'ATRIUM_BROKER_PUBKEY="${ATRIUM_BROKER_PUBKEY:-BPk1yjPNObjzEnlhMugwRwa69KSBp0znzS7C3_R146n1QJ_0QyZxiJvvnglYTtrib27KRAxV6yFlPs5JAhEJlyQ}"'
+        in text
+    )
+    assert (
+        'ATRIUM_BROKER_ISSUER="${ATRIUM_BROKER_ISSUER:-https://atrium-staging-492106370716.us-central1.run.app}"'
+        in text
+    )
+    assert (
+        'ATRIUM_BROKER_AUDIENCE="${ATRIUM_BROKER_AUDIENCE:-https://skywalker-mcp-server-492106370716.us-central1.run.app/mcp}"'
+        in text
+    )
+    assert "SKYWALKER_A2A_MIN_ROLE" not in text
+    assert "SKYWALKER_AGENT_MODEL" not in text
+    assert "roles/aiplatform.user" not in text
     assert "roles/storage.legacyBucket" in text and "roles/storage.legacyObject" in text
 
     # Extract and exercise the bucket IAM lockdown block against a fake gcloud binary.
@@ -1151,3 +1166,420 @@ else:
     )
     assert "has no legacy projectViewer/Editor/Owner bindings" in r2.stdout
     assert len(list(backups.glob("*.json"))) == 1
+
+
+# --- atr1.* Atrium brokered assertions (SPEC 1.3) ------------------------------------
+
+
+def _broker_keypair() -> tuple[Any, str]:
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    sk = ec.generate_private_key(ec.SECP256R1())
+    raw_pub = sk.public_key().public_bytes(
+        serialization.Encoding.X962,
+        serialization.PublicFormat.UncompressedPoint,
+    )
+    pub_b64 = base64.urlsafe_b64encode(raw_pub).rstrip(b"=").decode("ascii")
+    return sk, pub_b64
+
+
+def _mint_atr1(
+    sk: Any,
+    claims: dict[str, Any],
+    *,
+    prefix: str = "atr1",
+    sign_prefix: str = "atr1.",
+) -> str:
+    import base64
+    import json
+
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec, utils
+
+    payload_b64 = (
+        base64.urlsafe_b64encode(json.dumps(claims, separators=(",", ":")).encode())
+        .rstrip(b"=")
+        .decode("ascii")
+    )
+    der = sk.sign(
+        f"{sign_prefix}{payload_b64}".encode("ascii"),
+        ec.ECDSA(hashes.SHA256()),
+    )
+    r, s = utils.decode_dss_signature(der)
+    sig_raw = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+    sig_b64 = base64.urlsafe_b64encode(sig_raw).rstrip(b"=").decode("ascii")
+    return f"{prefix}.{payload_b64}.{sig_b64}"
+
+
+def _broker_claims(**overrides: Any) -> dict[str, Any]:
+    now = int(time.time())
+    base: dict[str, Any] = {
+        "iss": auth.DEFAULT_ATRIUM_BROKER_ISSUER,
+        "aud": f"{BASE}/mcp",
+        "sub": "staffer@ucr.edu",
+        "cid": "skywalker-ultra",
+        "iat": now,
+        "exp": now + 300,
+        "jti": "0123456789abcdef0123456789abcdef",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_broker_contract_pubkey_parses_and_accepts_optional_padding() -> None:
+    contract_pub = "BPk1yjPNObjzEnlhMugwRwa69KSBp0znzS7C3_R146n1QJ_0QyZxiJvvnglYTtrib27KRAxV6yFlPs5JAhEJlyQ"
+    assert auth._parse_broker_pubkey(contract_pub) is not None
+    assert auth._parse_broker_pubkey(f"  {contract_pub}= \n") is not None
+    assert auth._parse_broker_pubkey("") is None
+    assert auth._parse_broker_pubkey("not-valid-base64!") is None
+    # 65 bytes starting with 0x04 but point not on P-256 curve
+    import base64
+
+    off_curve = base64.urlsafe_b64encode(b"\x04" + b"\x01" * 64).rstrip(b"=").decode()
+    assert auth._parse_broker_pubkey(off_curve) is None
+
+
+def test_broker_assertion_fails_closed_when_pubkey_unset_or_malformed(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sk, _pub = _broker_keypair()
+    tok = _mint_atr1(sk, _broker_claims())
+    c = env["client"]
+
+    # Unset / empty ATRIUM_BROKER_PUBKEY -> 401
+    monkeypatch.delenv("ATRIUM_BROKER_PUBKEY", raising=False)
+    assert rpc(c, tok, "tools/list").status_code == 401
+    monkeypatch.setenv("ATRIUM_BROKER_PUBKEY", "   ")
+    assert rpc(c, tok, "tools/list").status_code == 401
+
+    # Compressed SEC1 point (33 bytes) -> 401
+    import base64
+
+    from cryptography.hazmat.primitives import serialization
+
+    comp = (
+        base64.urlsafe_b64encode(
+            sk.public_key().public_bytes(
+                serialization.Encoding.X962,
+                serialization.PublicFormat.CompressedPoint,
+            )
+        )
+        .rstrip(b"=")
+        .decode()
+    )
+    monkeypatch.setenv("ATRIUM_BROKER_PUBKEY", comp)
+    assert rpc(c, tok, "tools/list").status_code == 401
+
+
+def test_broker_assertion_wire_format_and_signature_guards(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import base64
+
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    sk, pub = _broker_keypair()
+    other_sk, _ = _broker_keypair()
+    monkeypatch.setenv("ATRIUM_BROKER_PUBKEY", pub)
+    c = env["client"]
+
+    valid = _mint_atr1(sk, _broker_claims())
+    assert tool_names(c, valid) == READ_TOOLS
+
+    # Signed with wrong private key -> 401
+    assert (
+        rpc(c, _mint_atr1(other_sk, _broker_claims()), "tools/list").status_code == 401
+    )
+
+    # Signed over payload without "atr1." prefix -> 401
+    no_prefix_sig = _mint_atr1(sk, _broker_claims(), sign_prefix="")
+    assert rpc(c, no_prefix_sig, "tools/list").status_code == 401
+
+    # Tampered payload with original signature -> 401
+    parts = valid.split(".")
+    tampered_payload = _mint_atr1(sk, _broker_claims(sub="nolab@ucr.edu")).split(".")[1]
+    assert (
+        rpc(c, f"atr1.{tampered_payload}.{parts[2]}", "tools/list").status_code == 401
+    )
+
+    # DER signature instead of 64-byte IEEE P1363 r||s -> 401
+    der_sig = (
+        base64.urlsafe_b64encode(
+            sk.sign(f"atr1.{parts[1]}".encode("ascii"), ec.ECDSA(hashes.SHA256()))
+        )
+        .rstrip(b"=")
+        .decode()
+    )
+    assert rpc(c, f"atr1.{parts[1]}.{der_sig}", "tools/list").status_code == 401
+
+    # Zero r or s scalar -> 401
+    zero_r = base64.urlsafe_b64encode(b"\x00" * 32 + b"\x01" * 32).rstrip(b"=").decode()
+    assert rpc(c, f"atr1.{parts[1]}.{zero_r}", "tools/list").status_code == 401
+
+    # Bad segment counts, padded base64, and > 2048 bytes -> 401
+    for bad in (
+        "atr1.",
+        f"atr1.{parts[1]}",
+        f"atr1.{parts[1]}.{parts[2]}.extra",
+        f"atr1.{parts[1]}==.{parts[2]}",
+        _mint_atr1(sk, _broker_claims(pad="x" * 2100)),
+    ):
+        assert rpc(c, bad, "tools/list").status_code == 401
+
+
+def test_broker_assertion_iss_aud_and_lifetime_guards(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sk, pub = _broker_keypair()
+    monkeypatch.setenv("ATRIUM_BROKER_PUBKEY", pub)
+    c = env["client"]
+    now = int(time.time())
+
+    # Trailing slash tolerance on iss and aud
+    ok_slash = _mint_atr1(
+        sk,
+        _broker_claims(
+            iss=auth.DEFAULT_ATRIUM_BROKER_ISSUER + "/",
+            aud=f"{BASE}/mcp/",
+        ),
+    )
+    assert tool_names(c, ok_slash) == READ_TOOLS
+
+    # Wrong issuer -> 401
+    assert (
+        rpc(
+            c,
+            _mint_atr1(sk, _broker_claims(iss="https://evil.example")),
+            "tools/list",
+        ).status_code
+        == 401
+    )
+
+    # Custom ATRIUM_BROKER_ISSUER override enforced
+    monkeypatch.setenv("ATRIUM_BROKER_ISSUER", "https://atrium.example.edu/")
+    assert rpc(c, ok_slash, "tools/list").status_code == 401
+    assert (
+        tool_names(
+            c,
+            _mint_atr1(sk, _broker_claims(iss="https://atrium.example.edu")),
+        )
+        == READ_TOOLS
+    )
+    monkeypatch.delenv("ATRIUM_BROKER_ISSUER")
+
+    # Wrong audience (another MCP server or missing /mcp) -> 401
+    for bad_aud in (
+        "https://nexus-mcp-server-492106370716.us-central1.run.app/mcp",
+        BASE,
+        "",
+    ):
+        assert (
+            rpc(
+                c, _mint_atr1(sk, _broker_claims(aud=bad_aud)), "tools/list"
+            ).status_code
+            == 401
+        )
+
+    # ATRIUM_BROKER_AUDIENCE allows canonical project-number URL alongside base_url + "/mcp"
+    canon_aud = "https://skywalker-mcp-server-492106370716.us-central1.run.app/mcp"
+    monkeypatch.setenv("ATRIUM_BROKER_AUDIENCE", canon_aud)
+    assert tool_names(c, _mint_atr1(sk, _broker_claims(aud=canon_aud))) == READ_TOOLS
+    assert (
+        tool_names(c, _mint_atr1(sk, _broker_claims(aud=f"{BASE}/mcp"))) == READ_TOOLS
+    )
+    monkeypatch.delenv("ATRIUM_BROKER_AUDIENCE")
+
+    # Clock skew (+/- 30s) and max lifetime (0 < exp - iat <= 360)
+    assert (
+        tool_names(c, _mint_atr1(sk, _broker_claims(iat=now + 25, exp=now + 325)))
+        == READ_TOOLS
+    )
+    assert (
+        tool_names(c, _mint_atr1(sk, _broker_claims(iat=now - 85, exp=now - 25)))
+        == READ_TOOLS
+    )
+    assert (
+        tool_names(c, _mint_atr1(sk, _broker_claims(iat=now, exp=now + 360)))
+        == READ_TOOLS
+    )
+    for bad_iat, bad_exp in (
+        (now + 35, now + 300),  # future iat beyond +30s
+        (now - 200, now - 35),  # expired beyond -30s
+        (now, now),  # zero lifetime
+        (now + 10, now),  # negative lifetime
+        (now, now + 361),  # exceeds 360s max lifetime
+        (now, now + 3600),  # 1-hour lifetime refused
+    ):
+        assert (
+            rpc(
+                c,
+                _mint_atr1(sk, _broker_claims(iat=bad_iat, exp=bad_exp)),
+                "tools/list",
+            ).status_code
+            == 401
+        )
+    # Boolean or string timestamps refused -> 401
+    assert (
+        rpc(
+            c,
+            _mint_atr1(sk, _broker_claims(iat=True, exp=now + 60)),
+            "tools/list",
+        ).status_code
+        == 401
+    )
+
+
+def test_broker_assertion_enforces_program_client_ceiling_rate_limit_and_audit(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sk, pub = _broker_keypair()
+    monkeypatch.setenv("ATRIUM_BROKER_PUBKEY", pub)
+
+    # Configure synthetic users and broker-only + disabled program_clients (no redirect_uris needed).
+    env["users_file"].write_text(
+        """
+domain: example.edu
+users:
+  - {email: alice@example.edu, netid: alice, role: admin, projects: [rc-main-proj]}
+  - {email: bob@example.edu, netid: bob, role: staff, projects: [lab-bob-proj]}
+  - {email: disabled@example.edu, netid: disabled, role: read, disabled: true}
+clients:
+  - id: skywalker-atrium
+    name: Atrium
+    max_role: staff
+    calls_per_min: 3
+  - id: skywalker-atrium-read
+    name: Atrium Read
+    max_role: read
+    calls_per_min: 5
+  - id: skywalker-disabled-flag
+    name: Disabled Flag
+    max_role: admin
+    disabled: true
+  - id: skywalker-disabled-list
+    name: Disabled List
+    max_role: admin
+disabled_clients:
+  - skywalker-disabled-list
+"""
+    )
+    env["server"].users.recheck = 0
+    c = env["client"]
+
+    # Broker-only client without redirect_uris cannot be used at /authorize
+    _, challenge = pkce()
+    r_authz = c.get(
+        "/authorize",
+        params={
+            "client_id": "skywalker-atrium",
+            "redirect_uri": REDIRECT,
+            "response_type": "code",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        },
+        follow_redirects=False,
+    )
+    assert r_authz.status_code == 400
+
+    # Dynamic RFC 7591 client, unknown client, missing cid, or disabled program_clients -> 401
+    dyn_cid = register(c)
+    for bad_cid in (
+        "",
+        "unknown-program",
+        dyn_cid,
+        "skywalker-disabled-flag",
+        "skywalker-disabled-list",
+    ):
+        assert (
+            rpc(
+                c,
+                _mint_atr1(sk, _broker_claims(sub="alice@example.edu", cid=bad_cid)),
+                "tools/list",
+            ).status_code
+            == 401
+        )
+
+    # Uppercase, padded, or wrong-domain sub -> 401
+    for bad_sub in (
+        "Alice@example.edu",
+        " alice@example.edu",
+        "alice@other.edu",
+        "",
+    ):
+        assert (
+            rpc(
+                c,
+                _mint_atr1(sk, _broker_claims(sub=bad_sub, cid="skywalker-atrium")),
+                "tools/list",
+            ).status_code
+            == 401
+        )
+
+    # Unlisted or disabled @example.edu user -> 403 access_denied (identical to OAuth)
+    for denied_sub in ("unlisted@example.edu", "disabled@example.edu"):
+        assert (
+            rpc(
+                c,
+                _mint_atr1(sk, _broker_claims(sub=denied_sub, cid="skywalker-atrium")),
+                "tools/list",
+            ).status_code
+            == 403
+        )
+
+    # Seed Alice's Google refresh token in the sealed store; verify caller-scoped GCP read,
+    # max_role ceiling, calls_per_min rate limit, and program:<cid> audit fields.
+    env["server"].google_tokens.save(
+        "alice@example.edu",
+        {
+            "access_token": "ga-alice@example.edu-0",
+            "refresh_token": "gr-alice@example.edu",
+            "expires_in": 3600,
+            "scope": f"openid email {auth.GCP_SCOPE}",
+        },
+    )
+    _project_route(env["cloud"])
+
+    # Alice is admin, capped to read by skywalker-atrium-read
+    read_tok = _mint_atr1(
+        sk, _broker_claims(sub="alice@example.edu", cid="skywalker-atrium-read")
+    )
+    assert tool_names(c, read_tok) == READ_TOOLS
+    denied_staff = call(c, read_tok, "skywalker_budgets", {})
+    assert (
+        denied_staff["isError"]
+        and "through client Atrium Read" in denied_staff["content"][0]["text"]
+    )
+
+    # Alice through skywalker-atrium (max_role=staff, calls_per_min=3): sees staff tools,
+    # uses her own Google token, enforces calls_per_min=3, and logs via="program:skywalker-atrium".
+    audit_lines(env)
+    atrium_tok = _mint_atr1(
+        sk, _broker_claims(sub="alice@example.edu", cid="skywalker-atrium")
+    )
+    assert tool_names(c, atrium_tok) == READ_TOOLS | STAFF_TOOLS
+    proj_res = payload(call(c, atrium_tok, "skywalker_projects", {"fresh": True}))
+    assert proj_res["total"] == 1
+    assert env["cloud"].calls[-1]["token"] == "ga-alice@example.edu-0"
+
+    # 2 more calls hit calls_per_min=3; 4th and 5th are rate-limited
+    statuses = [
+        call(c, atrium_tok, "skywalker_whoami", {})["isError"] for _ in range(4)
+    ]
+    assert statuses == [False, False, True, True]
+
+    lines = [ln for ln in audit_lines(env) if ln["event"] == "tool"]
+    assert lines
+    assert all(
+        ln["email"] == "alice@example.edu"
+        and ln["netid"] == "alice"
+        and ln["role"] == "staff"
+        and ln["client"] == "skywalker-atrium"
+        and ln["client_name"] == "Atrium"
+        and ln["via"] == "program:skywalker-atrium"
+        for ln in lines
+    )
+    assert lines[-1]["decision"] == "denied" and lines[-1]["reason"] == "rate_limited"

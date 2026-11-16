@@ -47,32 +47,28 @@ Enterprise, Hermes and programs such as Ultra. Built on `skywalker.intel` in thi
   IAM, optional `project_allocations` / per-user `allocations` in `users.yaml` and
   `SKYWALKER_PROJECT_USAGE_FILE` synthesize monthly allocation and usage summaries
   scoped strictly to `project_allowed`.
-- **A2A agent for Gemini Enterprise** (`agent.py`) at `/a2a/` in the same service,
-  gated to `staff` by default (`SKYWALKER_A2A_MIN_ROLE`, default `staff`) so
-  researchers use Atrium `/a2a/cloud` while RC staff can query Skywalker directly.
-  Gemini Enterprise sends the person's Skywalker
-  token (from Skywalker's own OAuth, through the pre-registered confidential client
-  `skywalker-gemini-enterprise`). The model (Gemini on Vertex AI, called as the
-  service account, whose only role is `roles/aiplatform.user`) gets just the tools
-  the caller's role allows, and each tool call runs in-process as the caller
-  through the same role check, project scope, limits and audit as MCP
-  (`channel=a2a`). Tasks are private to the person who made them; 10 questions a
-  minute and 300 a day per person. See "Gemini Enterprise" below.
+- **Atrium brokered assertions (`atr1.*`) and A2A consolidation.** External A2A lives
+  exclusively on Atrium Concierge (standalone `/a2a/` is unmounted). Atrium calls
+  `/mcp` with short-lived `atr1.*` ECDSA P-256 SHA-256 assertions verified against
+  `ATRIUM_BROKER_PUBKEY` (fail-closed if unset), `ATRIUM_BROKER_ISSUER`, and
+  `ATRIUM_BROKER_AUDIENCE` / `<base_url>/mcp`, bounded to `0 < exp - iat <= 360` with
+  `+/-30 s` clock skew. The assertion's `cid` must match a pre-registered, non-disabled
+  `program_client` in `users.yaml` (e.g. `skywalker-atrium`), enforcing the exact same
+  `min(user_role, client.max_role)` ceiling, per-program `calls_per_min` budget,
+  caller-scoped Google token lookup, and `via: "program:<cid>"` audit fields as OAuth.
 
 ## Endpoints
 
 | Path | What |
 |---|---|
 | `/` | RC-styled browser landing page (`Accept: text/html`); 401 challenge for programmatic probes |
-| `/mcp` | MCP, Streamable HTTP (needs a token) |
+| `/mcp` | MCP, Streamable HTTP (needs an OAuth token or `atr1.*` brokered assertion) |
 | `/sse`, `/messages/` | MCP, legacy SSE (needs a token) |
 | `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server` | discovery |
 | `/register`, `/authorize` (GET/POST), `/oauth/callback`, `/token`, `/revoke` | OAuth 2.1 (PKCE S256) |
 | `/whoami` | identity, role, whether a Google token is stored |
 | `/signout` (POST) | delete and revoke your Google grant and end all your sessions |
 | `/health` | `rev` (commit) and `tools_version` |
-| `/a2a/` | A2A 0.3 JSON-RPC agent (needs a token; `staff`+ by default) |
-| `/a2a/.well-known/agent-card.json`, `/.well-known/agent-card.json` | agent card (public) |
 
 ## Tools
 
@@ -121,13 +117,13 @@ Server settings (env, set by `deploy.sh` from `~/.config/skywalker/mcp-server.en
 | `SKYWALKER_FLEET_SCOPES` | `folders/123,folders/456` | where `skywalker_fleet` searches |
 | `SKYWALKER_QUOTA_PROJECT` | `my-project` | quota project for API calls (needs Recommender, Policy Analyzer and Cloud Quotas enabled) |
 | `SKYWALKER_MAX_BYTES` | `10737418240` | per-query BigQuery byte cap (default 10 GB) |
-| `SKYWALKER_BASE_URL` | `https://skywalker-...run.app` | public URL; turns on the A2A agent (its card names it) |
+| `SKYWALKER_BASE_URL` | `https://skywalker-...run.app` | default public URL when `SKYWALKER_PUBLIC_URL` is unset |
 | `SKYWALKER_PUBLIC_URL` | `https://skywalker-...run.app` | canonical OAuth issuer/callback base URL (`X-Forwarded-Host` ignored) |
-| `SKYWALKER_A2A_MIN_ROLE` | `staff` | minimum role for `/a2a/` (default `staff`) |
 | `SKYWALKER_PROJECT_USAGE_FILE` | `/data/project_usage.json` | optional pre-aggregated monthly project usage JSON for `read` fallback |
 | `ATRIUM_URL` | `https://atrium.example.edu/` | optional Atrium link on public HTML pages |
-| `SKYWALKER_AGENT_PROJECT` | `my-project` | where the agent's Gemini calls run and bill |
-| `SKYWALKER_AGENT_MODEL` | `gemini-3.8-flash` | the agent's model |
+| `ATRIUM_BROKER_PUBKEY` | `BPk1yj...` | 65-byte uncompressed P-256 SEC1 verification key (base64url) for `atr1.*` brokered assertions; fails closed if unset |
+| `ATRIUM_BROKER_ISSUER` | `https://atrium-staging-...run.app` | expected `iss` for `atr1.*` assertions |
+| `ATRIUM_BROKER_AUDIENCE` | `https://skywalker-mcp-server-...run.app/mcp` | canonical `aud` for `atr1.*` assertions (accepted alongside `<base_url>/mcp`) |
 
 Every billing query filters on the export's partition column and sets
 `maximumBytesBilled`; a month-to-date project query scans about 40 MB.
@@ -152,7 +148,7 @@ instance keeps single-use codes single use).
 ## Test
 
 ```bash
-scripts/test_mcp.sh                 # fake Google, fake Cloud, fake model; real MCP and A2A transport
+scripts/test_mcp.sh                 # fake Google, fake Cloud; real MCP transport, OAuth 2.1 and atr1.* assertions
 uv run python scripts/mcp_mutation_check.py   # every guard must make a test fail
 ```
 
@@ -163,39 +159,26 @@ Live: `mcp_server/examples/live_client.py login|whoami|tools|call <tool> '<json>
 - Claude Code: `claude mcp add --transport http skywalker <URL>/mcp`
 - Hermes: `hermes mcp add skywalker --url <URL>/mcp --auth oauth` (run alone, then restart)
 - claude.ai: add a custom connector with `<URL>/mcp`.
+- Atrium Concierge: calls `<URL>/mcp` with `atr1.*` brokered assertions (`cid: skywalker-atrium`) and serves all external A2A traffic.
 
 ## Gemini Enterprise
 
-Two ways in; both act as the signed-in person and both need a Gemini Enterprise
-admin (`roles/discoveryengine.admin` or the Gemini Enterprise Admin role) for the
-app. Both use the confidential program client in `users.yaml`:
+External A2A agents are consolidated onto **Atrium Concierge** (register Atrium's A2A
+card in Gemini Enterprise rather than pointing A2A directly at Skywalker). To connect
+Gemini Enterprise's own assistant directly to Skywalker as a **Custom MCP data store**,
+use the confidential program client in `users.yaml`:
 
 ```yaml
 clients:
   - id: skywalker-gemini-enterprise
     name: Gemini Enterprise
-    max_role: admin            # a person's own role still applies (Mike stays read)
+    max_role: admin            # a person's own role still applies (a read user stays read)
     calls_per_min: 120
     client_secret_sha256: <sha256 of the secret>   # the secret itself goes in GE's form
     redirect_uris:
       - https://vertexaisearch.cloud.google.com/oauth-redirect
       - https://vertexaisearch.cloud.google.com/static/oauth/oauth.html
 ```
-
-**A2A agent (recommended): Skywalker answers in its own words.** Register with the
-agent card from `/a2a/.well-known/agent-card.json` (console: Gemini Enterprise > app >
-Agents > Add agent > Custom agent via A2A). OAuth settings:
-
-| Field | Value |
-|---|---|
-| Client ID | `skywalker-gemini-enterprise` |
-| Client secret | the secret whose sha256 is in `users.yaml` |
-| Authorization URI | `<URL>/authorize?client_id=skywalker-gemini-enterprise&redirect_uri=https%3A%2F%2Fvertexaisearch.cloud.google.com%2Fstatic%2Foauth%2Foauth.html&scope=mcp&response_type=code&access_type=offline&prompt=consent&include_granted_scopes=true` |
-| Token URI | `<URL>/token` |
-| Scopes | `mcp` |
-
-(Google's form asks for `include_granted_scopes` and `prompt`; Skywalker ignores
-them, and never forwards them to Google.)
 
 **Custom MCP data store: Gemini's own assistant calls the tools.** Pre-GA; an org
 admin must first turn off the constraint "Disable custom MCP server connector for

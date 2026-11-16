@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Spec version | 1.2, 2026-11-14 (Atrium system review hardening: D2-D4, OAuth grant-family revocation, PUBLIC_URL, bucket IAM, landing page; 1.1 data levels P1-P2; 1.0 first spec) |
+| Spec version | 1.3, 2026-11-16 (Atrium consolidation: `atr1.*` ECDSA P-256 brokered assertions, standalone `/a2a/` removed; 1.2 Atrium review hardening; 1.1 data levels P1-P2; 1.0 first spec) |
 | Applies to | skywalker v0.35.0 (pyproject; git tags stop at v0.34.3), MCP `tools_version` 2 |
-| Status | CLI: built, used by RC staff. MCP server: live on Cloud Run as an internal pilot. A2A agent: live in the same service (`staff`+ by default). |
+| Status | CLI: built, used by RC staff. MCP server: live on Cloud Run as an internal pilot (external A2A consolidated onto Atrium Concierge). |
 | Owner | Chuck Forsyth (Research Computing). Authors: Chuck and Hermes. |
 | Repo | https://github.com/charles-forsyth/Skywalker (public, MIT) |
 | Nexus | project record "Skywalker MCP Server" (5cc9951a) |
@@ -17,11 +17,11 @@ GCP projects UCR Research Computing runs). It has two front ends that share one 
 - **CLI** (`skywalker`, `src/skywalker/main.py`): staff tool for audits of one project or the whole
   organization, a fleet performance monitor, the "zombie hunter" for wasted spend, model usage and
   cost, API key review, billing reports, and one write mode (`fix`, Ops Agent install over IAP).
-- **MCP server** (`mcp_server/`): 21 read-only tools over `skywalker.intel`, signed in with Google,
-  acting as the caller. Clients: Hermes (`skywalker`), Atrium's cloud agent, Telescope (Mac), Ultra.
-- **A2A agent** (`mcp_server/agent.py`, `/a2a/`): Gemini agent over the same tools for Gemini
-  Enterprise, with the same role checks and audit, gated to `staff` by default
-  (`SKYWALKER_A2A_MIN_ROLE`, default `staff`) so researchers use Atrium `/a2a/cloud`.
+- **MCP server** (`mcp_server/`): 21 read-only tools over `skywalker.intel`, signed in with Google
+  (OAuth 2.1 + PKCE S256 or short-lived `atr1.*` Atrium brokered assertions), acting as the caller.
+  Clients: Hermes (`skywalker`), Atrium Concierge (`skywalker-atrium`), Telescope (Mac), Ultra, and
+  Gemini Enterprise's custom MCP connector. External A2A lives exclusively on Atrium Concierge
+  (standalone `/a2a/` was removed in 1.3).
 
 ## 2. Layout
 
@@ -30,18 +30,18 @@ GCP projects UCR Research Computing runs). It has two front ends that share one 
 | `src/skywalker/walkers/` | per-service collectors used by the CLI (compute, storage, iam, network, gke, run, sql, filestore, vertex, asset, monitoring, apikeys, modelusage, org) |
 | `src/skywalker/modes/` | CLI modes: audit, monitor, zombies, modelusage, apikeys, billing, fix |
 | `src/skywalker/intel/` | the MCP library: gcp (read-only HTTP gate), billing, iam, inventory, ops, overview, projects, recommend, security |
-| `mcp_server/` | server.py (tools), auth.py (OAuth 2.1), access.py, scope.py, users.py, store.py, cache.py, agent.py, app.py, deploy.sh, Dockerfile |
-| `tests/` | 21 files, 174 tests (52 CLI + 122 MCP) and 50 security mutation guards |
+| `mcp_server/` | server.py (tools), auth.py (OAuth 2.1 + `atr1.*` brokered assertions), access.py, scope.py, users.py, store.py, cache.py, app.py, deploy.sh, Dockerfile |
+| `tests/` | 21 files, 171 tests (52 CLI + 119 MCP) and 55 security mutation guards |
 | `docs/` | GitHub Pages showcase (index.html) and this spec |
 
-## 3. Read-only guarantee (MCP and A2A)
+## 3. Read-only guarantee (MCP)
 
 - `skywalker/intel/gcp.py` refuses any request that is not a GET or one of three read RPCs
   (`getIamPolicy`, Logging `entries:list`, a single BigQuery `SELECT`) before it leaves the process.
 - No write tools exist. The `cloud-platform` scope is requested only because the read-only Google
   scopes do not cover budgets, asset search, IAM, Recommender, quotas or SCC (checked 2026-10-04).
 - The service account `skywalker-mcp@ucr-research-computing.iam.gserviceaccount.com` has no Google
-  Cloud data roles; every call uses the signed-in person's own token, so Google's audit logs name them.
+  Cloud data or Vertex roles; every call uses the signed-in person's own token, so Google's audit logs name them.
 - The CLI is different: it runs as whoever runs it, and `fix` mode writes (installs the Ops Agent).
 
 ## 4. Auth and access (same stack as Nexus MCP and ursa-bifrost)
@@ -49,6 +49,16 @@ GCP projects UCR Research Computing runs). It has two front ends that share one 
 - OAuth 2.1 + PKCE S256 with dynamic registration; Google sign-in limited to the `users.yaml` domain
   (`hd` checked on the request and in the ID token). Unknown client ids are refused. Canonical public
   URL is pinned via `SKYWALKER_PUBLIC_URL` / `PUBLIC_URL`; `X-Forwarded-Host` is never trusted.
+- Short-lived `atr1.*` Atrium brokered assertions (`Authorization: Bearer atr1.<payload>.<sig>`):
+  verified with ECDSA P-256 SHA-256 (`0 < r < N`, `0 < s < N`, 64-byte IEEE P1363 signature over
+  `"atr1." + payload_b64url`, total token length `<= 2048`). Fails closed (401) when
+  `ATRIUM_BROKER_PUBKEY` (65-byte uncompressed P-256 SEC1 point, base64url) is unset or malformed.
+  Verifies `iss` against `ATRIUM_BROKER_ISSUER` (default `https://atrium-staging-492106370716.us-central1.run.app`),
+  `aud` against `ATRIUM_BROKER_AUDIENCE` or `<base_url>/mcp`, `iat <= now + 30`, `now <= exp + 30`,
+  `0 < exp - iat <= 360`, lowercase domain email `sub` in `users.yaml`, and pre-registered
+  non-disabled `program_client` `cid` in `users.yaml` (e.g. `skywalker-atrium`). Enforces the exact
+  same `min(user_role, client.max_role)` role ceiling, per-program `calls_per_min` rate limit,
+  caller-scoped Google token lookup, and `via: "program:<cid>"` audit fields as an OAuth token.
 - Explicit CSRF-protected `POST /authorize` consent confirmation. Seen-consent cookies
   (`skywalker_mcp_seen_<sha256>`, `Path=/authorize`, 90-day TTL) are scoped per
   `(client_id, redirect_hostname)` and apply only to pre-registered `program_clients`; dynamically
@@ -87,10 +97,10 @@ Bump `tools_version` in server.py when a tool is added, removed or changes shape
 `ATRIUM_URL` link) while keeping the 401 `WWW-Authenticate` challenge for programmatic probes;
 `/mcp` (Streamable HTTP, stateless), `/sse` + `/messages/` (legacy), OAuth discovery and
 `/register` `/authorize` (GET/POST) `/oauth/callback` `/token` `/revoke`, `/whoami`, `/signout`,
-`/health` (rev + tools_version), `/a2a/` (`staff`+ by default via `SKYWALKER_A2A_MIN_ROLE`) and the
-public agent card at `/a2a/.well-known/agent-card.json`.
+and `/health` (rev + tools_version). Standalone `/a2a/*` is unmounted (returns 401/404); external
+A2A lives exclusively on Atrium Concierge.
 
-## 7. Deployment (as of 2026-11-04)
+## 7. Deployment (as of 2026-11-16)
 
 | | |
 |---|---|
@@ -98,8 +108,7 @@ public agent card at `/a2a/.well-known/agent-card.json`.
 | URL | https://skywalker-mcp-server-492106370716.us-central1.run.app/mcp (alias -dsfh6rrlia-uc) |
 | Revision | `skywalker-mcp-server-00015-gsw`, `/health` rev 5b7cdc9, tools_version 2 |
 | Deploy | `mcp_server/deploy.sh` (gcloud run deploy; env from the configuration table in the MCP README) |
-| Agent model | `SKYWALKER_AGENT_MODEL` (Gemini on Vertex, called as the SA; only role aiplatform.user) |
-| A2A limits | 300 messages a day per person (`MESSAGES_PER_DAY`), plus the shared per-person rate limits |
+| Brokered auth | `ATRIUM_BROKER_PUBKEY`, `ATRIUM_BROKER_ISSUER`, `ATRIUM_BROKER_AUDIENCE` for `atr1.*` assertions (`cid: skywalker-atrium`) |
 
 ## 8. Data handling
 
@@ -121,3 +130,4 @@ outputs; spend comes from the billing export.
 - 2026-11-04 1.0: first spec, from the code, both READMEs, deploy.sh and the live service.
 - 2026-11-04 1.1: data levels set to P1-P2 (Chuck).
 - 2026-11-14 1.2: Atrium whole-system review hardening -- D4 researcher project allocation and usage snapshot fallback (`project_allocations`/`allocations`, `SKYWALKER_PROJECT_USAGE_FILE`) gated by `project_allowed`; D3 `/a2a/` staff gate (`SKYWALKER_A2A_MIN_ROLE`, default `staff`); D2 scoped `skywalker_mcp_seen` cookie (`Path=/authorize`, 90d) and CSRF-protected `POST /authorize` confirmation required on every dynamic RFC 7591 client; pinned `SKYWALKER_PUBLIC_URL` (`X-Forwarded-Host` ignored); state-bucket legacy IAM lockdown in `deploy.sh`; RC-styled browser landing page at `GET /`; OAuth `grant_id` family replay revocation, full-grant `/revoke`, 90-day `GRANT_MAX_AGE`, required `client_id` on refresh, last-hop `X-Forwarded-For` IP rate limiting, `/.well-known/*`-only CORS, and 50 security mutation guards.
+- 2026-11-16 1.3: Atrium consolidation -- verify short-lived `atr1.*` ECDSA P-256 brokered assertions (`ATRIUM_BROKER_PUBKEY` fail-closed, `ATRIUM_BROKER_ISSUER`, `ATRIUM_BROKER_AUDIENCE`, `0 < exp - iat <= 360`, pre-registered `program_client` `cid` with `max_role` ceiling, `calls_per_min` rate limit, and `via: "program:<cid>"` audit fields); unmount and remove standalone `/a2a/` (`mcp_server/agent.py`, `a2a-sdk`, `roles/aiplatform.user` binding, `WellKnownCORS` `/a2a/.well-known/*`) so external A2A lives exclusively on Atrium Concierge; 55 security mutation guards.
